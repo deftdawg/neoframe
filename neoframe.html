@@ -228,13 +228,12 @@
             </select>
         </div>
         <div class="controls-group">
-            <label for="scaling">Scaling:</label>
+            <label for="scaling">Scaling: <span id="scale-percentage"></span></label>
             <select id="scaling">
-                <option value="fit" selected="selected">Scale to 13.3" (Fit)</option>
-                <option value="fill">Scale to 13.3" (Fill)</option>
-                <option value="width">Scale to Width</option>
-                <option value="height">Scale to Height</option>
-                <option value="size_8x10">Scale to 8"x10" (85%)</option>
+                <option value="fill" selected="selected">13.3: Fill</option>
+                <option value="fit">13.3: Fit</option>
+                <option value="fill_8x10">8x10: Fill</option>
+                <option value="fit_8x10">8x10: Fit</option>
                 <option value="custom">Custom Percentage</option>
             </select>
         </div>
@@ -291,7 +290,12 @@
             customScalingContainer.style.display = scalingMode === 'custom' ? 'flex' : 'none';
             updateImage();
         });
-        document.getElementById('customScale').addEventListener('input', updateImage);
+        document.getElementById('customScale').addEventListener('input', () => {
+            // When custom slider changes, update the percentage display immediately
+            const customScaleValue = parseInt(document.getElementById('customScale').value, 10);
+            document.getElementById('scale-percentage').textContent = `(${customScaleValue}%)`;
+            updateImage();
+        });
 
         let originalImage = null;
 
@@ -328,9 +332,11 @@
             const ctx = canvas.getContext('2d');
             const rotation = parseInt(document.getElementById('rotation').value, 10);
             const scalingMode = document.getElementById('scaling').value;
+            const scalePercentageSpan = document.getElementById('scale-percentage');
 
             const frameWidth = 1200;
             const frameHeight = 1600;
+            const size8x10Scaler = 0.985;
 
             // Offscreen canvas for pre-processing
             const offscreenCanvas = document.createElement('canvas');
@@ -345,33 +351,12 @@
             // 1. Draw original image to offscreen canvas with selected scaling
             let scale, scaledWidth, scaledHeight, drawX, drawY;
 
+            let baseScale;
             switch (scalingMode) {
                 case 'fit':
-                    scale = Math.min(frameWidth / originalImage.width, frameHeight / originalImage.height);
-                    scaledWidth = originalImage.width * scale;
-                    scaledHeight = originalImage.height * scale;
-                    drawX = (frameWidth - scaledWidth) / 2;
-                    drawY = (frameHeight - scaledHeight) / 2;
-                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
-                    break;
-                case 'width':
-                    scale = frameWidth / originalImage.width;
-                    scaledWidth = frameWidth;
-                    scaledHeight = originalImage.height * scale;
-                    drawX = 0;
-                    drawY = (frameHeight - scaledHeight) / 2;
-                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
-                    break;
-                case 'height':
-                    scale = frameHeight / originalImage.height;
-                    scaledWidth = originalImage.width * scale;
-                    scaledHeight = frameHeight;
-                    drawX = (frameWidth - scaledWidth) / 2;
-                    drawY = 0;
-                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
-                    break;
-                case 'size_8x10':
-                    scale = 0.85;
+                case 'fit_8x10':
+                    baseScale = Math.min(frameWidth / originalImage.width, frameHeight / originalImage.height);
+                    scale = scalingMode === 'fit_8x10' ? baseScale * size8x10Scaler : baseScale;
                     scaledWidth = originalImage.width * scale;
                     scaledHeight = originalImage.height * scale;
                     drawX = (frameWidth - scaledWidth) / 2;
@@ -388,8 +373,10 @@
                     offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
                     break;
                 case 'fill':
-                default: // Default to 'fill'
-                    scale = Math.max(frameWidth / originalImage.width, frameHeight / originalImage.height);
+                case 'fill_8x10':
+                default:
+                    baseScale = Math.max(frameWidth / originalImage.width, frameHeight / originalImage.height);
+                    scale = scalingMode === 'fill_8x10' ? baseScale * size8x10Scaler : baseScale;
                     const cropWidth = frameWidth / scale;
                     const cropHeight = frameHeight / scale;
                     const cropX = (originalImage.width - cropWidth) / 2;
@@ -403,6 +390,15 @@
                     );
                     break;
             }
+
+            // Update scale percentage display
+            if (scalingMode !== 'custom') {
+                 scalePercentageSpan.textContent = `(${(scale * 100).toFixed(1)}%)`;
+            } else {
+                const customScaleValue = parseInt(document.getElementById('customScale').value, 10);
+                scalePercentageSpan.textContent = `(${customScaleValue}%)`;
+            }
+
 
             // 2. Get image data and apply filters
             const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);
