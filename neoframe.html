@@ -227,6 +227,21 @@
                 <option value="270">270 degrees</option>
             </select>
         </div>
+        <div class="controls-group">
+            <label for="scaling">Scaling:</label>
+            <select id="scaling">
+                <option value="fit" selected="selected">Scale to 13.3" (Fit)</option>
+                <option value="fill">Scale to 13.3" (Fill)</option>
+                <option value="width">Scale to Width</option>
+                <option value="height">Scale to Height</option>
+                <option value="size_8x10">Scale to 8"x10" (85%)</option>
+                <option value="custom">Custom Percentage</option>
+            </select>
+        </div>
+        <div class="slider-container" id="custom-scaling-container" style="display: none;">
+            <label for="customScale">Custom Scale:</label>
+            <input type="range" id="customScale" min="10" max="200" step="1" value="100">
+        </div>
         <div class="slider-container">
             <label for="ditherStrength">Dither Strength:</label>
             <input type="range" id="ditherStrength" min="0" max="5" step="0.1" value="1.0">
@@ -248,7 +263,7 @@
     <div class="back-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">↑</div>
 
     <script>
-        // 固定6色调色板
+        // 固定6色调色板 / Fixed 6-color palette
         const rgbPalette = [
             { name: "Yellow", r: 255, g: 255, b: 0, value: 0xe2 },
             { name: "Green", r: 41, g: 204, b: 20, value: 0x96 },
@@ -258,7 +273,7 @@
             { name: "White", r: 255, g: 255, b: 255, value: 0xff }
         ];
 
-        // 事件监听
+        // 事件监听 / Event Listeners
         document.getElementById('upload').addEventListener('change', handleFileUpload);
         document.getElementById('download').addEventListener('click', downloadImage);
         document.getElementById('sendToESP32').addEventListener('click', sendToESP32);
@@ -270,10 +285,17 @@
         document.getElementById('ditherMode').addEventListener('change', updateImage);
         document.getElementById('ditherType').addEventListener('change', updateImage);
         document.getElementById('rotation').addEventListener('change', updateImage);
+        document.getElementById('scaling').addEventListener('change', () => {
+            const scalingMode = document.getElementById('scaling').value;
+            const customScalingContainer = document.getElementById('custom-scaling-container');
+            customScalingContainer.style.display = scalingMode === 'custom' ? 'flex' : 'none';
+            updateImage();
+        });
+        document.getElementById('customScale').addEventListener('input', updateImage);
 
         let originalImage = null;
 
-        // 显示返回顶部按钮
+        // 显示返回顶部按钮 / Show "Back to Top" button
         window.addEventListener('scroll', () => {
             const backToTop = document.querySelector('.back-to-top');
             backToTop.style.display = window.scrollY > 300 ? 'block' : 'none';
@@ -305,6 +327,7 @@
             const canvas = document.getElementById('canvas');
             const ctx = canvas.getContext('2d');
             const rotation = parseInt(document.getElementById('rotation').value, 10);
+            const scalingMode = document.getElementById('scaling').value;
 
             const frameWidth = 1200;
             const frameHeight = 1600;
@@ -315,19 +338,71 @@
             offscreenCanvas.height = frameHeight;
             const offscreenCtx = offscreenCanvas.getContext('2d');
 
-            // 1. Draw original image, scaled and cropped, to offscreen canvas
-            const scale = Math.max(frameWidth / originalImage.width, frameHeight / originalImage.height);
-            const scaledWidth = originalImage.width * scale;
-            const scaledHeight = originalImage.height * scale;
-            const cropX = (scaledWidth - frameWidth) / 2;
-            const cropY = (scaledHeight - frameHeight) / 2;
-            offscreenCtx.drawImage(
-                originalImage,
-                cropX / scale, cropY / scale,
-                frameWidth / scale, frameHeight / scale,
-                0, 0,
-                frameWidth, frameHeight
-            );
+            // Clear canvas with white background, so scaling to fit has a backdrop
+            offscreenCtx.fillStyle = 'white';
+            offscreenCtx.fillRect(0, 0, frameWidth, frameHeight);
+
+            // 1. Draw original image to offscreen canvas with selected scaling
+            let scale, scaledWidth, scaledHeight, drawX, drawY;
+
+            switch (scalingMode) {
+                case 'fit':
+                    scale = Math.min(frameWidth / originalImage.width, frameHeight / originalImage.height);
+                    scaledWidth = originalImage.width * scale;
+                    scaledHeight = originalImage.height * scale;
+                    drawX = (frameWidth - scaledWidth) / 2;
+                    drawY = (frameHeight - scaledHeight) / 2;
+                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
+                    break;
+                case 'width':
+                    scale = frameWidth / originalImage.width;
+                    scaledWidth = frameWidth;
+                    scaledHeight = originalImage.height * scale;
+                    drawX = 0;
+                    drawY = (frameHeight - scaledHeight) / 2;
+                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
+                    break;
+                case 'height':
+                    scale = frameHeight / originalImage.height;
+                    scaledWidth = originalImage.width * scale;
+                    scaledHeight = frameHeight;
+                    drawX = (frameWidth - scaledWidth) / 2;
+                    drawY = 0;
+                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
+                    break;
+                case 'size_8x10':
+                    scale = 0.85;
+                    scaledWidth = originalImage.width * scale;
+                    scaledHeight = originalImage.height * scale;
+                    drawX = (frameWidth - scaledWidth) / 2;
+                    drawY = (frameHeight - scaledHeight) / 2;
+                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
+                    break;
+                case 'custom':
+                    const customScaleValue = parseInt(document.getElementById('customScale').value, 10);
+                    scale = customScaleValue / 100;
+                    scaledWidth = originalImage.width * scale;
+                    scaledHeight = originalImage.height * scale;
+                    drawX = (frameWidth - scaledWidth) / 2;
+                    drawY = (frameHeight - scaledHeight) / 2;
+                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
+                    break;
+                case 'fill':
+                default: // Default to 'fill'
+                    scale = Math.max(frameWidth / originalImage.width, frameHeight / originalImage.height);
+                    const cropWidth = frameWidth / scale;
+                    const cropHeight = frameHeight / scale;
+                    const cropX = (originalImage.width - cropWidth) / 2;
+                    const cropY = (originalImage.height - cropHeight) / 2;
+                    offscreenCtx.drawImage(
+                        originalImage,
+                        cropX, cropY,
+                        cropWidth, cropHeight,
+                        0, 0,
+                        frameWidth, frameHeight
+                    );
+                    break;
+            }
 
             // 2. Get image data and apply filters
             const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);
@@ -499,50 +574,50 @@
             const g = tempData[idx + 1];
             const b = tempData[idx + 2];
 
-            // 找到最近的调色板颜色
+            // 找到最近的调色板颜色 / Find the closest palette color
             const closest = findClosestColor(r, g, b);
 
-            // 直接更新当前像素颜色到调色板颜色
+            // 直接更新当前像素颜色到调色板颜色 / Directly update the current pixel color to the palette color
             data[idx] = closest.r;
             data[idx + 1] = closest.g;
             data[idx + 2] = closest.b;
 
-            // 计算误差并按Atkinson算法扩散
+            // 计算误差并按Atkinson算法扩散 / Calculate the error and diffuse it using the Atkinson algorithm
             const errR = (r - closest.r) * strength;
             const errG = (g - closest.g) * strength;
             const errB = (b - closest.b) * strength;
 
             const fraction = 1 / 8;
 
-            // 向右1像素
+            // 向右1像素 / To the right 1 pixel
             if (x + 1 < width) {
                 const idxRight = idx + 4;
                 tempData[idxRight] = Math.min(255, Math.max(0, tempData[idxRight] + errR * fraction));
                 tempData[idxRight + 1] = Math.min(255, Math.max(0, tempData[idxRight + 1] + errG * fraction));
                 tempData[idxRight + 2] = Math.min(255, Math.max(0, tempData[idxRight + 2] + errB * fraction));
             }
-            // 向右2像素
+            // 向右2像素 / To the right 2 pixels
             if (x + 2 < width) {
                 const idxRight2 = idx + 8;
                 tempData[idxRight2] = Math.min(255, Math.max(0, tempData[idxRight2] + errR * fraction));
                 tempData[idxRight2 + 1] = Math.min(255, Math.max(0, tempData[idxRight2 + 1] + errG * fraction));
                 tempData[idxRight2 + 2] = Math.min(255, Math.max(0, tempData[idxRight2 + 2] + errB * fraction));
             }
-            // 向下1行
+            // 向下1行 / Down 1 row
             if (y + 1 < height) {
-                // 左1像素
+                // 左1像素 / Left 1 pixel
                 if (x > 0) {
                     const idxDownLeft = idx + width * 4 - 4;
                     tempData[idxDownLeft] = Math.min(255, Math.max(0, tempData[idxDownLeft] + errR * fraction));
                     tempData[idxDownLeft + 1] = Math.min(255, Math.max(0, tempData[idxDownLeft + 1] + errG * fraction));
                     tempData[idxDownLeft + 2] = Math.min(255, Math.max(0, tempData[idxDownLeft + 2] + errB * fraction));
                 }
-                // 正下方
+                // 正下方 / Directly below
                 const idxDown = idx + width * 4;
                 tempData[idxDown] = Math.min(255, Math.max(0, tempData[idxDown] + errR * fraction));
                 tempData[idxDown + 1] = Math.min(255, Math.max(0, tempData[idxDown + 1] + errG * fraction));
                 tempData[idxDown + 2] = Math.min(255, Math.max(0, tempData[idxDown + 2] + errB * fraction));
-                // 右1像素
+                // 右1像素 / Right 1 pixel
                 if (x + 1 < width) {
                     const idxDownRight = idx + width * 4 + 4;
                     tempData[idxDownRight] = Math.min(255, Math.max(0, tempData[idxDownRight] + errR * fraction));
@@ -550,7 +625,7 @@
                     tempData[idxDownRight + 2] = Math.min(255, Math.max(0, tempData[idxDownRight + 2] + errB * fraction));
                 }
             }
-            // 向下2行
+            // 向下2行 / Down 2 rows
             if (y + 2 < height) {
                 const idxDown2 = idx + width * 8;
                 tempData[idxDown2] = Math.min(255, Math.max(0, tempData[idxDown2] + errR * fraction));
@@ -824,26 +899,26 @@ if (mode === 'sixColor') {
     const width = imageData.width;
     const height = imageData.height;
     const data = imageData.data;
-    const processedData = new Uint8Array(Math.ceil((width * height) / 2));  // 每个字节存储2个像素
+    const processedData = new Uint8Array(Math.ceil((width * height) / 2));  // 每个字节存储2个像素 / Each byte stores 2 pixels
 
-    // 将 RGB 转换为 6 色模式
+    // 将 RGB 转换为 6 色模式 / Convert RGB to 6-color mode
     function rgbToSixColor(r, g, b) {
-        if (r < 128 && g < 128 && b < 128) return 0x00;  // 黑色
-        if (r > 128 && g > 128 && b > 128) return 0x01;  // 白色
-        if (r > 128 && g < 128 && b < 128) return 0x03;  // 红色
-        if (r > 128 && g > 128 && b < 128) return 0x02;  // 黄色
-        if (r < 128 && g > 128 && b < 128) return 0x06;  // 绿色
-        if (r < 128 && g < 128 && b > 128) return 0x05;  // 蓝色
-        return 0x01;  // 默认白色
+        if (r < 128 && g < 128 && b < 128) return 0x00;  // 黑色 / Black
+        if (r > 128 && g > 128 && b > 128) return 0x01;  // 白色 / White
+        if (r > 128 && g < 128 && b < 128) return 0x03;  // 红色 / Red
+        if (r > 128 && g > 128 && b < 128) return 0x02;  // 黄色 / Yellow
+        if (r < 128 && g > 128 && b < 128) return 0x06;  // 绿色 / Green
+        if (r < 128 && g < 128 && b > 128) return 0x05;  // 蓝色 / Blue
+        return 0x01;  // 默认白色 / Default white
     }
 
-    // 处理图像数据
+    // 处理图像数据 / Process image data
     for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x += 2) { // 每两个像素处理一次
-            const index1 = (y * width + x) * 4;       // 第一个像素的索引
-            const index2 = (y * width + x + 1) * 4;   // 第二个像素的索引
+        for (let x = 0; x < width; x += 2) { // 每两个像素处理一次 / Process two pixels at a time
+            const index1 = (y * width + x) * 4;       // 第一个像素的索引 / Index of the first pixel
+            const index2 = (y * width + x + 1) * 4;   // 第二个像素的索引 / Index of the second pixel
 
-            // 获取两个像素的颜色值
+            // 获取两个像素的颜色值 / Get the color values of the two pixels
             const r1 = data[index1];
             const g1 = data[index1 + 1];
             const b1 = data[index1 + 2];
@@ -852,14 +927,14 @@ if (mode === 'sixColor') {
             const g2 = data[index2 + 1];
             const b2 = data[index2 + 2];
 
-            // 将 RGB 转换为 6 色模式
+            // 将 RGB 转换为 6 色模式 / Convert RGB to 6-color mode
             const colorValue1 = rgbToSixColor(r1, g1, b1);
             const colorValue2 = rgbToSixColor(r2, g2, b2);
 
-            // 组合成一个字节，每两个4位颜色值组成一个字节
+            // 组合成一个字节，每两个4位颜色值组成一个字节 / Combine into one byte, two 4-bit color values form one byte
             const combinedValue = (colorValue1 << 4) | colorValue2;
 
-            // 计算在 processedData 中的索引
+            // 计算在 processedData 中的索引 / Calculate the index in processedData
             const newIndex = (y * (width / 2)) + (x / 2);
             processedData[newIndex] = combinedValue;
         }
@@ -874,15 +949,15 @@ if (mode === 'sixColor') {
                 const width = imageData.width;
     const height = imageData.height;
     const data = imageData.data;
-    const processedData = new Uint8Array(Math.ceil((width * height) / 4));  // 计算4灰度模式的数组大小
+    const processedData = new Uint8Array(Math.ceil((width * height) / 4));  // 计算4灰度模式的数组大小 / Calculate the array size for 4-grayscale mode
 
-    // 将RGB颜色转换为4灰度模式中的灰度值
+    // 将RGB颜色转换为4灰度模式中的灰度值 / Convert RGB color to grayscale value in 4-grayscale mode
     function rgbToGray(r, g, b) {
         const grayscale = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-        if (grayscale < 64) return 0x03;  // 黑色
-        if (grayscale < 128) return 0x02; // 红色
-        if (grayscale < 140) return 0x00; // 黄色
-        if (grayscale < 255) return 0x01; // 白色
+        if (grayscale < 64) return 0x03;  // 黑色 / Black
+        if (grayscale < 128) return 0x02; // 红色 / Red
+        if (grayscale < 140) return 0x00; // 黄色 / Yellow
+        if (grayscale < 255) return 0x01; // 白色 / White
     }
 
     for (let y = 0; y < height; y++) {
@@ -891,28 +966,28 @@ if (mode === 'sixColor') {
             const r = data[index];
             const g = data[index + 1];
             const b = data[index + 2];
-            const a = data[index + 3];  // 透明度值
+            const a = data[index + 3];  // 透明度值 / Alpha value
             const grayValue = rgbToGray(r, g, b);
-            // 垂直翻转
+            // 垂直翻转 / Vertical flip
            // const newIndex = ((height - 1 - y) * width + x) / 4 | 0;
            const newIndex = (y * width + x) / 4 | 0;
-            // 将灰度值存储到processedData中
-            const shift = 6 - ((x % 4) * 2);  // 计算每个像素在字节中的位置
+            // 将灰度值存储到processedData中 / Store the grayscale value in processedData
+            const shift = 6 - ((x % 4) * 2);  // 计算每个像素在字节中的位置 / Calculate the position of each pixel in the byte
             processedData[newIndex] |= (grayValue << shift);
         }
     }
 
-    return processedData;  // 返回的数组大小是 15,000 字节
+    return processedData;  // 返回的数组大小是 15,000 字节 / The returned array size is 15,000 bytes
         }
       else if (mode === 'blackWhiteColor') {
         const width = imageData.width;
     const height = imageData.height;
     const data = imageData.data;
-    const byteWidth = Math.ceil(width / 8);  // 计算每行字节的宽度
+    const byteWidth = Math.ceil(width / 8);  // 计算每行字节的宽度 / Calculate the width of each row in bytes
     const processedData = new Uint8Array(byteWidth * height);
 
-    // 设置黑白转换的阈值
-    const threshold = 140;  // 你可以调整这个阈值来改变黑白分界线
+    // 设置黑白转换的阈值 / Set the threshold for black and white conversion
+    const threshold = 140;  // 你可以调整这个阈值来改变黑白分界线 / You can adjust this threshold to change the black and white dividing line
 
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
@@ -920,14 +995,14 @@ if (mode === 'sixColor') {
             const r = data[index];
             const g = data[index + 1];
             const b = data[index + 2];
-            // 计算灰度值
+            // 计算灰度值 / Calculate grayscale value
             const grayscale = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-            // 根据阈值决定黑白
+            // 根据阈值决定黑白 / Determine black or white based on the threshold
             const bit = grayscale >= threshold ? 1 : 0;
-            // 计算当前字节中的位置
+            // 计算当前字节中的位置 / Calculate the position in the current byte
             const byteIndex = y * byteWidth + Math.floor(x / 8);
-            const bitIndex = 7 - (x % 8);  // 从高位到低位
-            // 设置相应的位
+            const bitIndex = 7 - (x % 8);  // 从高位到低位 / From high bit to low bit
+            // 设置相应的位 / Set the corresponding bit
             processedData[byteIndex] |= (bit << bitIndex);
         }
     }
@@ -935,11 +1010,11 @@ if (mode === 'sixColor') {
     return processedData;
    
     }    else if (mode === 'threeColor') {
-    const byteWidth = Math.ceil(width / 8); // 每个像素占用1位，一个字节可以存储8个像素
-    const blackWhiteThreshold = 140;  // 黑白阈值
-    const redThreshold = 160;  // 红色阈值
+    const byteWidth = Math.ceil(width / 8); // 每个像素占用1位，一个字节可以存储8个像素 / Each pixel occupies 1 bit, one byte can store 8 pixels
+    const blackWhiteThreshold = 140;  // 黑白阈值 / Black and white threshold
+    const redThreshold = 160;  // 红色阈值 / Red threshold
 
-    // 创建两个 Uint8Array 用于存储黑白和红白数据
+    // 创建两个 Uint8Array 用于存储黑白和红白数据 / Create two Uint8Arrays to store black-and-white and red-and-white data
     const blackWhiteData = new Uint8Array(height * byteWidth);
     const redWhiteData = new Uint8Array(height * byteWidth);
 
@@ -951,33 +1026,33 @@ if (mode === 'sixColor') {
             const b = data[index + 2];
             const grayscale = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
 
-            // 黑白处理
-            const blackWhiteBit = grayscale >= blackWhiteThreshold ? 1 : 0; // 1表示白色，0表示黑色
+            // 黑白处理 / Black and white processing
+            const blackWhiteBit = grayscale >= blackWhiteThreshold ? 1 : 0; // 1表示白色，0表示黑色 / 1 means white, 0 means black
             const blackWhiteByteIndex = y * byteWidth + Math.floor(x / 8);
             const blackWhiteBitIndex = 7 - (x % 8);
             if (blackWhiteBit) {
-                blackWhiteData[blackWhiteByteIndex] |= (0x01 << blackWhiteBitIndex);  // 写入白色
+                blackWhiteData[blackWhiteByteIndex] |= (0x01 << blackWhiteBitIndex);  // 写入白色 / Write white
             } else {
-                blackWhiteData[blackWhiteByteIndex] &= ~(0x01 << blackWhiteBitIndex);  // 写入黑色
+                blackWhiteData[blackWhiteByteIndex] &= ~(0x01 << blackWhiteBitIndex);  // 写入黑色 / Write black
             }
 
-            // 红白处理
-            // 使用红色和白色的组合逻辑
-            const redWhiteBit = (r > redThreshold && r > g && r > b) ? 0 : 1; // 0表示红色，1表示白色
+            // 红白处理 / Red and white processing
+            // 使用红色和白色的组合逻辑 / Use red and white combination logic
+            const redWhiteBit = (r > redThreshold && r > g && r > b) ? 0 : 1; // 0表示红色，1表示白色 / 0 means red, 1 means white
             const redWhiteByteIndex = y * byteWidth + Math.floor(x / 8);
             const redWhiteBitIndex = 7 - (x % 8);
             if (redWhiteBit) {
-                redWhiteData[redWhiteByteIndex] |= (0x01 << redWhiteBitIndex);  // 写入白色数据位为1
+                redWhiteData[redWhiteByteIndex] |= (0x01 << redWhiteBitIndex);  // 写入白色数据位为1 / Write white data bit as 1
             } else {
-                redWhiteData[redWhiteByteIndex] &= ~(0x01 << redWhiteBitIndex);  // 写入红色数据位为0
+                redWhiteData[redWhiteByteIndex] &= ~(0x01 << redWhiteBitIndex);  // 写入红色数据位为0 / Write red data bit as 0
             }
         }
     }
 
-    // 合并两个数组
+    // 合并两个数组 / Merge the two arrays
     const processedData = new Uint8Array(blackWhiteData.length + redWhiteData.length);
-    processedData.set(blackWhiteData, 0);  // 将黑白数据放在前半部分
-    processedData.set(redWhiteData, blackWhiteData.length);  // 将红白数据放在后半部分
+    processedData.set(blackWhiteData, 0);  // 将黑白数据放在前半部分 / Put the black and white data in the first half
+    processedData.set(redWhiteData, blackWhiteData.length);  // 将红白数据放在后半部分 / Put the red and white data in the second half
 
     console.log("BlackWhiteData:", blackWhiteData);
     console.log("RedWhiteData:", redWhiteData);
@@ -1033,6 +1108,7 @@ if (mode === 'sixColor') {
                     const responseText = await response.text();
                     console.log(`Server response: ${responseText}`);
 
+                    // "文件上传成功" means "File uploaded successfully"
                     if (responseText.includes("文件上传成功")) {
                         alert('Image data has been successfully uploaded to ESP32.');
                         break;
@@ -1062,6 +1138,7 @@ if (mode === 'sixColor') {
                 }
                 const responseText = await response.text();
                 console.log(`Server response: ${responseText}`);
+                // "切换到实时模式成功" means "Switched to real-time mode successfully"
                 if (responseText.includes("切换到实时模式成功")) {
                     alert('Successfully switched to real-time mode');
                 }
@@ -1087,6 +1164,7 @@ if (mode === 'sixColor') {
                 }
                 const responseText = await response.text();
                 console.log(`Server response: ${responseText}`);
+                // "切换到轮播模式成功" means "Switched to slideshow mode successfully"
                 if (responseText.includes("切换到轮播模式成功")) {
                     alert('Successfully switched to slideshow mode');
                 }
