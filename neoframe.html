@@ -34,7 +34,14 @@
             text-shadow: 2px 2px 5px rgba(0, 173, 181, 0.7);
             text-align: center;
         }
-        .container {
+        .page-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 90%;
+            max-width: 1800px;
+        }
+        .controls-container {
             background-color: #16213e;
             border-radius: 12px;
             padding: 15px;
@@ -42,6 +49,7 @@
             max-width: 600px;
             width: 100%;
             box-sizing: border-box;
+            margin-bottom: 20px;
         }
         .file-upload-container {
             position: sticky;
@@ -172,7 +180,7 @@
             h1 {
                 font-size: 2em;
             }
-            .container {
+            .controls-container {
                 padding: 10px;
             }
             button, label.file-label {
@@ -190,76 +198,83 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>NeoFrame</h1>
-        <div class="file-upload-container">
-            <label for="upload" class="file-label">Upload Image</label>
-            <input type="file" id="upload" accept="image/*">
-        </div>
-        <div class="controls-group"><!-- style="display: none;" -->
-            <label for="esp32-ip">ESP32 IP Address:</label>
-            <input type="text" id="esp32-ip" value="192.168.4.1" placeholder="Enter ESP32 IP Address" style="width: 100%; padding: 8px; border-radius: 5px; border: none; background-color: #1f4068; color: #e5e5e5;">
-        </div>
-        <div class="controls-group">
-            <label for="ditherMode">Colors Mode:</label>
-            <select id="ditherMode">
-                <option value="sixColor" selected="selected">Six Colors</option>
-                <option value="fourColor">Four Colors</option>
-                <option value="blackWhiteColor">Black &amp; White</option>
-                <option value="threeColor">Three Colors</option>
-            </select>
-        </div>
-        <div class="controls-group">
-            <label for="ditherType">Dithering Mode:</label>
-            <select id="ditherType">
-                <option value="floydSteinberg" selected="selected">Floyd-Steinberg</option>
-                <option value="atkinson">Atkinson</option>
-                <option value="stucki">Stucki</option>
-                <option value="jarvis">Jarvis-Judice-Ninke</option>
-            </select>
-        </div>
-        <div class="controls-group">
-            <label for="rotation">Rotate:</label>
-            <select id="rotation">
-                <option value="0" selected="selected">0 degrees</option>
-                <option value="90">90 degrees</option>
-                <option value="180">180 degrees</option>
-                <option value="270">270 degrees</option>
-            </select>
-        </div>
-        <div class="controls-group">
-            <label for="scaling">Scaling: <span id="scale-percentage"></span></label>
-            <select id="scaling">
-                <option value="fill" selected="selected">13.3: Fill</option>
-                <option value="fit">13.3: Fit</option>
-                <option value="fill_8x10">8x10: Fill</option>
-                <option value="fit_8x10">8x10: Fit</option>
-                <option value="custom">Custom Percentage</option>
-            </select>
-        </div>
-        <div class="slider-container" id="custom-scaling-container" style="display: none;">
-            <label for="customScale">Custom Scale:</label>
-            <input type="range" id="customScale" min="10" max="200" step="1" value="100">
-        </div>
-        <div class="slider-container">
-            <label for="ditherStrength">Dither Strength:</label>
-            <input type="range" id="ditherStrength" min="0" max="5" step="0.1" value="1.0">
-        </div>
-        <div class="slider-container">
-            <label for="contrast">Contrast:</label>
-            <input type="range" id="contrast" min="0.5" max="2" step="0.1" value="1.2">
+    <div class="page-container">
+        <div class="controls-container">
+            <h1>NeoFrame</h1>
+            <div class="file-upload-container">
+                <label for="upload" class="file-label">Upload Image</label>
+                <input type="file" id="upload" accept="image/*">
+            </div>
+            <div class="controls-group"><!-- style="display: none;" -->
+                <label for="esp32-ip">ESP32 IP Address:</label>
+                <input type="text" id="esp32-ip" value="192.168.4.1" placeholder="Enter ESP32 IP Address" style="width: 100%; padding: 8px; border-radius: 5px; border: none; background-color: #1f4068; color: #e5e5e5;">
+            </div>
+            <div class="controls-group">
+                <label for="ditherMode">Colors Mode:</label>
+                <select id="ditherMode">
+                    <option value="sixColor" selected="selected">Six Colors</option>
+                    <option value="fourColor">Four Colors</option>
+                    <option value="blackWhiteColor">Black &amp; White</option>
+                    <option value="threeColor">Three Colors</option>
+                </select>
+            </div>
+            <div class="controls-group">
+                <label for="ditherType">Dithering Mode:</label>
+                <select id="ditherType">
+                    <option value="floydSteinberg" selected="selected">Floyd-Steinberg</option>
+                    <option value="atkinson">Atkinson</option>
+                    <option value="stucki">Stucki</option>
+                    <option value="jarvis">Jarvis-Judice-Ninke</option>
+                </select>
+            </div>
+            <div class="controls-group">
+                <label for="rotation">Rotate:</label>
+                <select id="rotation">
+                    <option value="0" selected="selected">0 degrees</option>
+                    <option value="90">90 degrees</option>
+                    <option value="180">180 degrees</option>
+                    <option value="270">270 degrees</option>
+                </select>
+            </div>
+            <div class="controls-group">
+                <label for="scaling">Scaling: <span id="scale-percentage"></span></label>
+                <select id="scaling">
+                    <option value="fill" selected="selected">13.3: Fill</option>
+                    <option value="fit">13.3: Fit</option>
+                    <option value="fill_8x10">8x10: Fill</option>
+                    <option value="fit_8x10">8x10: Fit</option>
+                    <option value="original">100% (Original Size)</option>
+                    <option value="custom">Custom Percentage</option>
+                </select>
+            </div>
+            <div class="slider-container" id="custom-scaling-container" style="display: none;">
+                <label for="customScale">Custom Scale:</label>
+                <input type="range" id="customScale" min="10" max="200" step="1" value="100">
+                <input type="number" id="customScaleNumber" min="10" max="200" value="100" style="width: 70px; margin-left: 10px;">
+                <button class="quick-scale" data-scale="50">50%</button>
+                <button class="quick-scale" data-scale="100">100%</button>
+                <button class="quick-scale" data-scale="200">200%</button>
+            </div>
+            <div class="slider-container">
+                <label for="ditherStrength">Dither Strength:</label>
+                <input type="range" id="ditherStrength" min="0" max="5" step="0.1" value="1.0">
+            </div>
+            <div class="slider-container">
+                <label for="contrast">Contrast:</label>
+                <input type="range" id="contrast" min="0.5" max="2" step="0.1" value="1.2">
+            </div>
+             <div class="button-group">
+                <button id="download" style="display:none;">Download Dithered Image</button>
+                <button id="sendToESP32" style="display: inline;">Send to Frame</button>
+                <button id="downloadArray" style="display:none;">Download Data Array</button>
+                <button id="switchToRealTime" style="display: inline;">Switch To Real-time Mode</button>
+                <button id="switchToSlideShow" style="display: inline;">Switch To Slideshow Mode</button>
+            </div>
+            <div id="log"></div>
         </div>
         <canvas id="canvas" width="1200" height="1600"></canvas>
-        <div class="button-group">
-            <button id="download" style="display:none;">Download Dithered Image</button>
-            <button id="sendToESP32" style="display: inline;">Send to Frame</button>
-            <button id="downloadArray" style="display:none;">Download Data Array</button>
-            <button id="switchToRealTime" style="display: inline;">Switch To Real-time Mode</button>
-            <button id="switchToSlideShow" style="display: inline;">Switch To Slideshow Mode</button>
-        </div>
-        <div id="log"></div>
+        <div class="back-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">↑</div>
     </div>
-    <div class="back-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">↑</div>
 
     <script>
         // 固定6色调色板 / Fixed 6-color palette
@@ -290,11 +305,29 @@
             customScalingContainer.style.display = scalingMode === 'custom' ? 'flex' : 'none';
             updateImage();
         });
-        document.getElementById('customScale').addEventListener('input', () => {
-            // When custom slider changes, update the percentage display immediately
-            const customScaleValue = parseInt(document.getElementById('customScale').value, 10);
-            document.getElementById('scale-percentage').textContent = `(${customScaleValue}%)`;
+
+        const customScaleSlider = document.getElementById('customScale');
+        const customScaleNumber = document.getElementById('customScaleNumber');
+
+        function setCustomScale(value) {
+            const scaleValue = parseInt(value, 10);
+            customScaleSlider.value = scaleValue;
+            customScaleNumber.value = scaleValue;
+            document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
             updateImage();
+        }
+
+        customScaleSlider.addEventListener('input', () => setCustomScale(customScaleSlider.value));
+        customScaleNumber.addEventListener('input', () => setCustomScale(customScaleNumber.value));
+
+        document.querySelectorAll('.quick-scale').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const scaleValue = e.target.dataset.scale;
+                setCustomScale(scaleValue);
+                // Also switch the dropdown to custom if another mode was selected
+                document.getElementById('scaling').value = 'custom';
+                document.getElementById('custom-scaling-container').style.display = 'flex';
+            });
         });
 
         let originalImage = null;
@@ -359,6 +392,14 @@
                     scale = scalingMode === 'fit_8x10' ? baseScale * size8x10Scaler : baseScale;
                     scaledWidth = originalImage.width * scale;
                     scaledHeight = originalImage.height * scale;
+                    drawX = (frameWidth - scaledWidth) / 2;
+                    drawY = (frameHeight - scaledHeight) / 2;
+                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
+                    break;
+                case 'original':
+                    scale = 1.0;
+                    scaledWidth = originalImage.width;
+                    scaledHeight = originalImage.height;
                     drawX = (frameWidth - scaledWidth) / 2;
                     drawY = (frameHeight - scaledHeight) / 2;
                     offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
