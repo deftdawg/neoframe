@@ -310,32 +310,30 @@
         const customScaleNumber = document.getElementById('customScaleNumber');
 
         let debounceTimer;
-        function setCustomScale(value) {
-            const scaleValue = parseInt(value, 10);
-            if (isNaN(scaleValue) || scaleValue < 10 || scaleValue > 200) return;
 
-            customScaleSlider.value = scaleValue;
-            customScaleNumber.value = scaleValue;
-            document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
-
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                updateImage();
-            }, 500);
-        }
-
+        // For the slider: update the number box on 'input', but only update the image on 'change' (on release)
         customScaleSlider.addEventListener('input', () => {
             const scaleValue = parseInt(customScaleSlider.value, 10);
             customScaleNumber.value = scaleValue;
             document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
+        });
+        customScaleSlider.addEventListener('change', () => {
             updateImage();
         });
 
+        // For the number input: use a debounce to avoid updating on every keystroke
         customScaleNumber.addEventListener('input', () => {
             const scaleValue = parseInt(customScaleNumber.value, 10);
-            customScaleSlider.value = scaleValue;
-            document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
 
+            // Sync slider and percentage text immediately
+            if (!isNaN(scaleValue) && scaleValue >= 10 && scaleValue <= 200) {
+                customScaleSlider.value = scaleValue;
+                document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
+            } else if (customScaleNumber.value === '') {
+                 document.getElementById('scale-percentage').textContent = ``;
+            }
+
+            // Debounce the actual image update
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
                 if (!isNaN(scaleValue) && scaleValue >= 10 && scaleValue <= 200) {
@@ -344,6 +342,7 @@
             }, 500);
         });
 
+        // Quick-set buttons should update everything immediately.
         document.querySelectorAll('.quick-scale').forEach(button => {
             button.addEventListener('click', (e) => {
                 const scaleValue = e.target.dataset.scale;
