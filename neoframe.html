@@ -309,21 +309,49 @@
         const customScaleSlider = document.getElementById('customScale');
         const customScaleNumber = document.getElementById('customScaleNumber');
 
+        let debounceTimer;
         function setCustomScale(value) {
             const scaleValue = parseInt(value, 10);
+            if (isNaN(scaleValue) || scaleValue < 10 || scaleValue > 200) return;
+
             customScaleSlider.value = scaleValue;
             customScaleNumber.value = scaleValue;
             document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
-            updateImage();
+
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                updateImage();
+            }, 500);
         }
 
-        customScaleSlider.addEventListener('input', () => setCustomScale(customScaleSlider.value));
-        customScaleNumber.addEventListener('input', () => setCustomScale(customScaleNumber.value));
+        customScaleSlider.addEventListener('input', () => {
+            const scaleValue = parseInt(customScaleSlider.value, 10);
+            customScaleNumber.value = scaleValue;
+            document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
+            updateImage();
+        });
+
+        customScaleNumber.addEventListener('input', () => {
+            const scaleValue = parseInt(customScaleNumber.value, 10);
+            customScaleSlider.value = scaleValue;
+            document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
+
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                if (!isNaN(scaleValue) && scaleValue >= 10 && scaleValue <= 200) {
+                    updateImage();
+                }
+            }, 500);
+        });
 
         document.querySelectorAll('.quick-scale').forEach(button => {
             button.addEventListener('click', (e) => {
                 const scaleValue = e.target.dataset.scale;
-                setCustomScale(scaleValue);
+                customScaleSlider.value = scaleValue;
+                customScaleNumber.value = scaleValue;
+                document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
+                updateImage();
+
                 // Also switch the dropdown to custom if another mode was selected
                 document.getElementById('scaling').value = 'custom';
                 document.getElementById('custom-scaling-container').style.display = 'flex';
