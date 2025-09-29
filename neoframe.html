@@ -367,6 +367,24 @@
             const scalingMode = document.getElementById('scaling').value;
             const scalePercentageSpan = document.getElementById('scale-percentage');
 
+            // Create a temporary canvas to hold the rotated source image
+            const rotatedCanvas = document.createElement('canvas');
+            const rotatedCtx = rotatedCanvas.getContext('2d');
+
+            if (rotation === 90 || rotation === 270) {
+                rotatedCanvas.width = originalImage.height;
+                rotatedCanvas.height = originalImage.width;
+            } else {
+                rotatedCanvas.width = originalImage.width;
+                rotatedCanvas.height = originalImage.height;
+            }
+
+            rotatedCtx.translate(rotatedCanvas.width / 2, rotatedCanvas.height / 2);
+            rotatedCtx.rotate(rotation * Math.PI / 180);
+            rotatedCtx.drawImage(originalImage, -originalImage.width / 2, -originalImage.height / 2);
+
+            const sourceImage = rotatedCanvas;
+
             const frameWidth = 1200;
             const frameHeight = 1600;
             const size8x10Scaler = 0.985;
@@ -388,42 +406,42 @@
             switch (scalingMode) {
                 case 'fit':
                 case 'fit_8x10':
-                    baseScale = Math.min(frameWidth / originalImage.width, frameHeight / originalImage.height);
+                    baseScale = Math.min(frameWidth / sourceImage.width, frameHeight / sourceImage.height);
                     scale = scalingMode === 'fit_8x10' ? baseScale * size8x10Scaler : baseScale;
-                    scaledWidth = originalImage.width * scale;
-                    scaledHeight = originalImage.height * scale;
+                    scaledWidth = sourceImage.width * scale;
+                    scaledHeight = sourceImage.height * scale;
                     drawX = (frameWidth - scaledWidth) / 2;
                     drawY = (frameHeight - scaledHeight) / 2;
-                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
+                    offscreenCtx.drawImage(sourceImage, drawX, drawY, scaledWidth, scaledHeight);
                     break;
                 case 'original':
                     scale = 1.0;
-                    scaledWidth = originalImage.width;
-                    scaledHeight = originalImage.height;
+                    scaledWidth = sourceImage.width;
+                    scaledHeight = sourceImage.height;
                     drawX = (frameWidth - scaledWidth) / 2;
                     drawY = (frameHeight - scaledHeight) / 2;
-                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
+                    offscreenCtx.drawImage(sourceImage, drawX, drawY, scaledWidth, scaledHeight);
                     break;
                 case 'custom':
                     const customScaleValue = parseInt(document.getElementById('customScale').value, 10);
                     scale = customScaleValue / 100;
-                    scaledWidth = originalImage.width * scale;
-                    scaledHeight = originalImage.height * scale;
+                    scaledWidth = sourceImage.width * scale;
+                    scaledHeight = sourceImage.height * scale;
                     drawX = (frameWidth - scaledWidth) / 2;
                     drawY = (frameHeight - scaledHeight) / 2;
-                    offscreenCtx.drawImage(originalImage, drawX, drawY, scaledWidth, scaledHeight);
+                    offscreenCtx.drawImage(sourceImage, drawX, drawY, scaledWidth, scaledHeight);
                     break;
                 case 'fill':
                 case 'fill_8x10':
                 default:
-                    baseScale = Math.max(frameWidth / originalImage.width, frameHeight / originalImage.height);
+                    baseScale = Math.max(frameWidth / sourceImage.width, frameHeight / sourceImage.height);
                     scale = scalingMode === 'fill_8x10' ? baseScale * size8x10Scaler : baseScale;
                     const cropWidth = frameWidth / scale;
                     const cropHeight = frameHeight / scale;
-                    const cropX = (originalImage.width - cropWidth) / 2;
-                    const cropY = (originalImage.height - cropHeight) / 2;
+                    const cropX = (sourceImage.width - cropWidth) / 2;
+                    const cropY = (sourceImage.height - cropHeight) / 2;
                     offscreenCtx.drawImage(
-                        originalImage,
+                        sourceImage,
                         cropX, cropY,
                         cropWidth, cropHeight,
                         0, 0,
@@ -448,21 +466,11 @@
             ditherImage(imageData);
             offscreenCtx.putImageData(imageData, 0, 0);
 
-            // 3. Prepare main canvas and draw the processed offscreen canvas with rotation
-            if (rotation === 90 || rotation === 270) {
-                canvas.width = frameHeight;
-                canvas.height = frameWidth;
-            } else {
-                canvas.width = frameWidth;
-                canvas.height = frameHeight;
-            }
-
+            // 3. Prepare main canvas and draw the processed offscreen canvas
+            canvas.width = frameWidth;
+            canvas.height = frameHeight;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.save();
-            ctx.translate(canvas.width / 2, canvas.height / 2);
-            ctx.rotate(rotation * Math.PI / 180);
-            ctx.drawImage(offscreenCanvas, -frameWidth / 2, -frameHeight / 2);
-            ctx.restore();
+            ctx.drawImage(offscreenCanvas, 0, 0);
         }
 
         function adjustContrast(imageData, factor) {
