@@ -1,0 +1,1102 @@
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Dithering to Epaper</title>
+    <style>
+        /* latin */
+        @font-face {
+        font-family: 'Orbitron';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1nyGy6BoWgz.woff2) format('woff2');
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a2e;
+            color: #e5e5e5;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            color: #00adb5;
+            margin: 10px 0;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 5px rgba(0, 173, 181, 0.7);
+            text-align: center;
+        }
+        .container {
+            background-color: #16213e;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .file-upload-container {
+            position: sticky;
+            top: 10px;
+            z-index: 100;
+            background: #16213e;
+            padding: 10px 0;
+            border-radius: 8px;
+            text-align: center;
+        }
+        label.file-label {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #00adb5;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s ease, transform 0.2s;
+            font-size: 1.1em;
+        }
+        label.file-label:hover {
+            background-color: #007f91;
+            transform: scale(1.05);
+        }
+        input[type="file"] {
+            display: none;
+        }
+        select, input[type="range"] {
+            width: 100%;
+            padding: 8px;
+            border-radius: 5px;
+            border: none;
+            outline: none;
+            font-size: 1em;
+            background-color: #1f4068;
+            color: #e5e5e5;
+            margin-bottom: 10px;
+        }
+        #canvas {
+            border: 2px solid #00adb5;
+            border-radius: 8px;
+            margin: 15px auto;
+            display: block;
+            max-width: 100%;
+            height: auto;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            background-color: #00adb5;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+            transition: background-color 0.3s ease, transform 0.2s;
+            font-size: 1em;
+        }
+        button:hover {
+            background-color: #007f91;
+            transform: scale(1.05);
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .slider-container label {
+            flex: 0 0 100px;
+            font-size: 0.9em;
+        }
+        .controls-group {
+            margin-bottom: 15px;
+        }
+        .controls-group label {
+            display: block;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+        #progressBar {
+            width: 100%;
+            height: 8px;
+            background-color: #333;
+            border-radius: 5px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+        #progressBar > div {
+            height: 100%;
+            background-color: #00adb5;
+            width: 0;
+            transition: width 0.3s;
+        }
+        #log {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #1f4068;
+            border-radius: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        .back-to-top {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            background-color: #00adb5;
+            color: white;
+            border-radius: 50%;
+            cursor: pointer;
+            /* display: none; */
+            transition: background-color 0.3s ease;
+        }
+        .back-to-top:hover {
+            background-color: #007f91;
+        }
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2em;
+            }
+            .container {
+                padding: 10px;
+            }
+            button, label.file-label {
+                padding: 10px 15px;
+                font-size: 0.9em;
+            }
+            .slider-container label {
+                font-size: 0.8em;
+                flex: 0 0 80px;
+            }
+            select, input[type="range"] {
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NeoFrame</h1>
+        <div class="file-upload-container">
+            <label for="upload" class="file-label">Upload Image</label>
+            <input type="file" id="upload" accept="image/*">
+        </div>
+        <div class="controls-group"><!-- style="display: none;" -->
+            <label for="esp32-ip">ESP32 IP Address:</label>
+            <input type="text" id="esp32-ip" value="192.168.4.1" placeholder="Enter ESP32 IP Address" style="width: 100%; padding: 8px; border-radius: 5px; border: none; background-color: #1f4068; color: #e5e5e5;">
+        </div>
+        <div class="controls-group">
+            <label for="ditherMode">Colors Mode:</label>
+            <select id="ditherMode">
+                <option value="sixColor" selected="selected">Six Colors</option>
+                <option value="fourColor">Four Colors</option>
+                <option value="blackWhiteColor">Black &amp; White</option>
+                <option value="threeColor">Three Colors</option>
+            </select>
+        </div>
+        <div class="controls-group">
+            <label for="ditherType">Dithering Mode:</label>
+            <select id="ditherType">
+                <option value="floydSteinberg" selected="selected">Floyd-Steinberg</option>
+                <option value="atkinson">Atkinson</option>
+                <option value="stucki">Stucki</option>
+                <option value="jarvis">Jarvis-Judice-Ninke</option>
+            </select>
+        </div>
+        <div class="slider-container">
+            <label for="ditherStrength">Dither Strength:</label>
+            <input type="range" id="ditherStrength" min="0" max="5" step="0.1" value="1.0">
+        </div>
+        <div class="slider-container">
+            <label for="contrast">Contrast:</label>
+            <input type="range" id="contrast" min="0.5" max="2" step="0.1" value="1.2">
+        </div>
+        <canvas id="canvas" width="1200" height="1600"></canvas>
+        <div class="button-group">
+            <button id="download" style="display:none;">Download Dithered Image</button>
+            <button id="sendToESP32" style="display: inline;">Send to Frame</button>
+            <button id="downloadArray" style="display:none;">Download Data Array</button>
+            <button id="switchToRealTime" style="display: inline;">Switch To Real-time Mode</button>
+            <button id="switchToSlideShow" style="display: inline;">Switch To Slideshow Mode</button>
+        </div>
+        <div id="log"></div>
+    </div>
+    <div class="back-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">↑</div>
+
+    <script>
+        // 固定6色调色板
+        const rgbPalette = [
+            { name: "Yellow", r: 255, g: 255, b: 0, value: 0xe2 },
+            { name: "Green", r: 41, g: 204, b: 20, value: 0x96 },
+            { name: "Blue", r: 0, g: 0, b: 255, value: 0x1d },
+            { name: "Red", r: 255, g: 0, b: 0, value: 0x4c },
+            { name: "Black", r: 0, g: 0, b: 0, value: 0x00 },
+            { name: "White", r: 255, g: 255, b: 255, value: 0xff }
+        ];
+
+        // 事件监听
+        document.getElementById('upload').addEventListener('change', handleFileUpload);
+        document.getElementById('download').addEventListener('click', downloadImage);
+        document.getElementById('sendToESP32').addEventListener('click', sendToESP32);
+        document.getElementById('downloadArray').addEventListener('click', downloadDataArray);
+        document.getElementById('switchToRealTime').addEventListener('click', switchToRealTime);
+        document.getElementById('switchToSlideShow').addEventListener('click', switchToSlideShow);
+        document.getElementById('ditherStrength').addEventListener('input', updateImage);
+        document.getElementById('contrast').addEventListener('input', updateImage);
+        document.getElementById('ditherMode').addEventListener('change', updateImage);
+        document.getElementById('ditherType').addEventListener('change', updateImage);
+
+        let currentImageData = null;
+
+        // 显示返回顶部按钮
+        window.addEventListener('scroll', () => {
+            const backToTop = document.querySelector('.back-to-top');
+            backToTop.style.display = window.scrollY > 300 ? 'block' : 'none';
+        });
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            event.target.value = '';
+            const reader = new FileReader();
+
+            reader.onload = function (e) {
+                const img = new Image();
+                img.onload = function () {
+                    const canvas = document.getElementById('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    const imgWidth = img.width;
+                    const imgHeight = img.height;
+
+                    canvas.width = 1200;
+                    canvas.height = 1600;
+
+                    const scale = Math.max(canvas.width / imgWidth, canvas.height / imgHeight);
+                    const scaledWidth = imgWidth * scale;
+                    const scaledHeight = imgHeight * scale;
+
+                    const cropX = (scaledWidth - canvas.width) / 2;
+                    const cropY = (scaledHeight - canvas.height) / 2;
+
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(
+                        img,
+                        cropX / scale, cropY / scale,
+                        canvas.width / scale, canvas.height / scale,
+                        0, 0,
+                        canvas.width, canvas.height
+                    );
+
+                    currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    updateImage();
+
+                    document.getElementById('sendToESP32').style.display = 'inline';
+                    document.getElementById('switchToRealTime').style.display = 'inline';
+                    document.getElementById('switchToSlideShow').style.display = 'inline';
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function updateImage() {
+            if (!currentImageData) return;
+
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const imageData = new ImageData(
+                new Uint8ClampedArray(currentImageData.data),
+                currentImageData.width,
+                currentImageData.height
+            );
+
+            const contrastFactor = parseFloat(document.getElementById('contrast').value);
+            adjustContrast(imageData, contrastFactor);
+            ditherImage(imageData);
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function adjustContrast(imageData, factor) {
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = Math.min(255, Math.max(0, (data[i] - 128) * factor + 128));
+                data[i + 1] = Math.min(255, Math.max(0, (data[i + 1] - 128) * factor + 128));
+                data[i + 2] = Math.min(255, Math.max(0, (data[i + 2] - 128) * factor + 128));
+            }
+            return imageData;
+        }
+
+        function rgbToLab(r, g, b) {
+            r = r / 255;
+            g = g / 255;
+            b = b / 255;
+
+            r = r > 0.04045 ? Math.pow((r + 0.055) / 1.055, 2.4) : r / 12.92;
+            g = g > 0.04045 ? Math.pow((g + 0.055) / 1.055, 2.4) : g / 12.92;
+            b = b > 0.04045 ? Math.pow((b + 0.055) / 1.055, 2.4) : b / 12.92;
+
+            r *= 100;
+            g *= 100;
+            b *= 100;
+
+            let x = r * 0.4124 + g * 0.3576 + b * 0.1805;
+            let y = r * 0.2126 + g * 0.7152 + b * 0.0722;
+            let z = r * 0.0193 + g * 0.1192 + b * 0.9505;
+
+            x /= 95.047;
+            y /= 100.0;
+            z /= 108.883;
+
+            x = x > 0.008856 ? Math.pow(x, 1/3) : (7.787 * x) + (16 / 116);
+            y = y > 0.008856 ? Math.pow(y, 1/3) : (7.787 * y) + (16 / 116);
+            z = z > 0.008856 ? Math.pow(z, 1/3) : (7.787 * z) + (16 / 116);
+
+            const l = (116 * y) - 16;
+            const a = 500 * (x - y);
+            const bLab = 200 * (y - z);
+
+            return { l, a, b: bLab };
+        }
+
+        function labDistance(lab1, lab2) {
+            const dl = lab1.l - lab2.l;
+            const da = lab1.a - lab2.a;
+            const db = lab1.b - lab2.b;
+            return Math.sqrt(0.2 * dl * dl + 3 * da * da + 3 * db * db);
+        }
+
+        function findClosestColor(r, g, b) {
+            if (r < 50 && g < 150 && b > 100) {
+                return rgbPalette[2];
+            }
+
+            const inputLab = rgbToLab(r, g, b);
+            let minDistance = Infinity;
+            let closestColor = rgbPalette[0];
+
+            for (const color of rgbPalette) {
+                const colorLab = rgbToLab(color.r, color.g, color.b);
+                const distance = labDistance(inputLab, colorLab);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestColor = color;
+                }
+            }
+
+            return closestColor;
+        }
+
+        function floydSteinbergDither(imageData, strength) {
+            const width = imageData.width;
+            const height = imageData.height;
+            const data = imageData.data;
+            const tempData = new Uint8ClampedArray(data);
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const r = tempData[idx];
+                    const g = tempData[idx + 1];
+                    const b = tempData[idx + 2];
+
+                    const closest = findClosestColor(r, g, b);
+
+                    const errR = (r - closest.r) * strength;
+                    const errG = (g - closest.g) * strength;
+                    const errB = (b - closest.b) * strength;
+
+                    if (x + 1 < width) {
+                        const idxRight = idx + 4;
+                        tempData[idxRight] = Math.min(255, Math.max(0, tempData[idxRight] + errR * 7 / 16));
+                        tempData[idxRight + 1] = Math.min(255, Math.max(0, tempData[idxRight + 1] + errG * 7 / 16));
+                        tempData[idxRight + 2] = Math.min(255, Math.max(0, tempData[idxRight + 2] + errB * 7 / 16));
+                    }
+                    if (y + 1 < height) {
+                        if (x > 0) {
+                            const idxDownLeft = idx + width * 4 - 4;
+                            tempData[idxDownLeft] = Math.min(255, Math.max(0, tempData[idxDownLeft] + errR * 3 / 16));
+                            tempData[idxDownLeft + 1] = Math.min(255, Math.max(0, tempData[idxDownLeft + 1] + errG * 3 / 16));
+                            tempData[idxDownLeft + 2] = Math.min(255, Math.max(0, tempData[idxDownLeft + 2] + errB * 3 / 16));
+                        }
+                        const idxDown = idx + width * 4;
+                        tempData[idxDown] = Math.min(255, Math.max(0, tempData[idxDown] + errR * 5 / 16));
+                        tempData[idxDown + 1] = Math.min(255, Math.max(0, tempData[idxDown + 1] + errG * 5 / 16));
+                        tempData[idxDown + 2] = Math.min(255, Math.max(0, tempData[idxDown + 2] + errB * 5 / 16));
+                        if (x + 1 < width) {
+                            const idxDownRight = idx + width * 4 + 4;
+                            tempData[idxDownRight] = Math.min(255, Math.max(0, tempData[idxDownRight] + errR * 1 / 16));
+                            tempData[idxDownRight + 1] = Math.min(255, Math.max(0, tempData[idxDownRight + 1] + errG * 1 / 16));
+                            tempData[idxDownRight + 2] = Math.min(255, Math.max(0, tempData[idxDownRight + 2] + errB * 1 / 16));
+                        }
+                    }
+                }
+            }
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const r = tempData[idx];
+                    const g = tempData[idx + 1];
+                    const b = tempData[idx + 2];
+
+                    const closest = findClosestColor(r, g, b);
+                    data[idx] = closest.r;
+                    data[idx + 1] = closest.g;
+                    data[idx + 2] = closest.b;
+                }
+            }
+
+            return imageData;
+        }
+
+        function atkinsonDither(imageData, strength) {
+    const width = imageData.width;
+    const height = imageData.height;
+    const data = imageData.data;
+    const tempData = new Uint8ClampedArray(data);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const idx = (y * width + x) * 4;
+            const r = tempData[idx];
+            const g = tempData[idx + 1];
+            const b = tempData[idx + 2];
+
+            // 找到最近的调色板颜色
+            const closest = findClosestColor(r, g, b);
+
+            // 直接更新当前像素颜色到调色板颜色
+            data[idx] = closest.r;
+            data[idx + 1] = closest.g;
+            data[idx + 2] = closest.b;
+
+            // 计算误差并按Atkinson算法扩散
+            const errR = (r - closest.r) * strength;
+            const errG = (g - closest.g) * strength;
+            const errB = (b - closest.b) * strength;
+
+            const fraction = 1 / 8;
+
+            // 向右1像素
+            if (x + 1 < width) {
+                const idxRight = idx + 4;
+                tempData[idxRight] = Math.min(255, Math.max(0, tempData[idxRight] + errR * fraction));
+                tempData[idxRight + 1] = Math.min(255, Math.max(0, tempData[idxRight + 1] + errG * fraction));
+                tempData[idxRight + 2] = Math.min(255, Math.max(0, tempData[idxRight + 2] + errB * fraction));
+            }
+            // 向右2像素
+            if (x + 2 < width) {
+                const idxRight2 = idx + 8;
+                tempData[idxRight2] = Math.min(255, Math.max(0, tempData[idxRight2] + errR * fraction));
+                tempData[idxRight2 + 1] = Math.min(255, Math.max(0, tempData[idxRight2 + 1] + errG * fraction));
+                tempData[idxRight2 + 2] = Math.min(255, Math.max(0, tempData[idxRight2 + 2] + errB * fraction));
+            }
+            // 向下1行
+            if (y + 1 < height) {
+                // 左1像素
+                if (x > 0) {
+                    const idxDownLeft = idx + width * 4 - 4;
+                    tempData[idxDownLeft] = Math.min(255, Math.max(0, tempData[idxDownLeft] + errR * fraction));
+                    tempData[idxDownLeft + 1] = Math.min(255, Math.max(0, tempData[idxDownLeft + 1] + errG * fraction));
+                    tempData[idxDownLeft + 2] = Math.min(255, Math.max(0, tempData[idxDownLeft + 2] + errB * fraction));
+                }
+                // 正下方
+                const idxDown = idx + width * 4;
+                tempData[idxDown] = Math.min(255, Math.max(0, tempData[idxDown] + errR * fraction));
+                tempData[idxDown + 1] = Math.min(255, Math.max(0, tempData[idxDown + 1] + errG * fraction));
+                tempData[idxDown + 2] = Math.min(255, Math.max(0, tempData[idxDown + 2] + errB * fraction));
+                // 右1像素
+                if (x + 1 < width) {
+                    const idxDownRight = idx + width * 4 + 4;
+                    tempData[idxDownRight] = Math.min(255, Math.max(0, tempData[idxDownRight] + errR * fraction));
+                    tempData[idxDownRight + 1] = Math.min(255, Math.max(0, tempData[idxDownRight + 1] + errG * fraction));
+                    tempData[idxDownRight + 2] = Math.min(255, Math.max(0, tempData[idxDownRight + 2] + errB * fraction));
+                }
+            }
+            // 向下2行
+            if (y + 2 < height) {
+                const idxDown2 = idx + width * 8;
+                tempData[idxDown2] = Math.min(255, Math.max(0, tempData[idxDown2] + errR * fraction));
+                tempData[idxDown2 + 1] = Math.min(255, Math.max(0, tempData[idxDown2 + 1] + errG * fraction));
+                tempData[idxDown2 + 2] = Math.min(255, Math.max(0, tempData[idxDown2 + 2] + errB * fraction));
+            }
+        }
+    }
+
+    return imageData;
+}
+
+        function stuckiDither(imageData, strength) {
+            const width = imageData.width;
+            const height = imageData.height;
+            const data = imageData.data;
+            const tempData = new Uint8ClampedArray(data);
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const r = tempData[idx];
+                    const g = tempData[idx + 1];
+                    const b = tempData[idx + 2];
+
+                    const closest = findClosestColor(r, g, b);
+
+                    const errR = (r - closest.r) * strength;
+                    const errG = (g - closest.g) * strength;
+                    const errB = (b - closest.b) * strength;
+
+                    const divisor = 42;
+
+                    if (x + 1 < width) {
+                        const idxRight = idx + 4;
+                        tempData[idxRight] = Math.min(255, Math.max(0, tempData[idxRight] + errR * 8 / divisor));
+                        tempData[idxRight + 1] = Math.min(255, Math.max(0, tempData[idxRight + 1] + errG * 8 / divisor));
+                        tempData[idxRight + 2] = Math.min(255, Math.max(0, tempData[idxRight + 2] + errB * 8 / divisor));
+                    }
+                    if (x + 2 < width) {
+                        const idxRight2 = idx + 8;
+                        tempData[idxRight2] = Math.min(255, Math.max(0, tempData[idxRight2] + errR * 4 / divisor));
+                        tempData[idxRight2 + 1] = Math.min(255, Math.max(0, tempData[idxRight2 + 1] + errG * 4 / divisor));
+                        tempData[idxRight2 + 2] = Math.min(255, Math.max(0, tempData[idxRight2 + 2] + errB * 4 / divisor));
+                    }
+                    if (y + 1 < height) {
+                        if (x > 1) {
+                            const idxDownLeft2 = idx + width * 4 - 8;
+                            tempData[idxDownLeft2] = Math.min(255, Math.max(0, tempData[idxDownLeft2] + errR * 2 / divisor));
+                            tempData[idxDownLeft2 + 1] = Math.min(255, Math.max(0, tempData[idxDownLeft2 + 1] + errG * 2 / divisor));
+                            tempData[idxDownLeft2 + 2] = Math.min(255, Math.max(0, tempData[idxDownLeft2 + 2] + errB * 2 / divisor));
+                        }
+                        if (x > 0) {
+                            const idxDownLeft = idx + width * 4 - 4;
+                            tempData[idxDownLeft] = Math.min(255, Math.max(0, tempData[idxDownLeft] + errR * 4 / divisor));
+                            tempData[idxDownLeft + 1] = Math.min(255, Math.max(0, tempData[idxDownLeft + 1] + errG * 4 / divisor));
+                            tempData[idxDownLeft + 2] = Math.min(255, Math.max(0, tempData[idxDownLeft + 2] + errB * 4 / divisor));
+                        }
+                        const idxDown = idx + width * 4;
+                        tempData[idxDown] = Math.min(255, Math.max(0, tempData[idxDown] + errR * 8 / divisor));
+                        tempData[idxDown + 1] = Math.min(255, Math.max(0, tempData[idxDown + 1] + errG * 8 / divisor));
+                        tempData[idxDown + 2] = Math.min(255, Math.max(0, tempData[idxDown + 2] + errB * 8 / divisor));
+                        if (x + 1 < width) {
+                            const idxDownRight = idx + width * 4 + 4;
+                            tempData[idxDownRight] = Math.min(255, Math.max(0, tempData[idxDownRight] + errR * 4 / divisor));
+                            tempData[idxDownRight + 1] = Math.min(255, Math.max(0, tempData[idxDownRight + 1] + errG * 4 / divisor));
+                            tempData[idxDownRight + 2] = Math.min(255, Math.max(0, tempData[idxDownRight + 2] + errB * 4 / divisor));
+                        }
+                        if (x + 2 < width) {
+                            const idxDownRight2 = idx + width * 4 + 8;
+                            tempData[idxDownRight2] = Math.min(255, Math.max(0, tempData[idxDownRight2] + errR * 2 / divisor));
+                            tempData[idxDownRight2 + 1] = Math.min(255, Math.max(0, tempData[idxDownRight2 + 1] + errG * 2 / divisor));
+                            tempData[idxDownRight2 + 2] = Math.min(255, Math.max(0, tempData[idxDownRight2 + 2] + errB * 2 / divisor));
+                        }
+                    }
+                    if (y + 2 < height) {
+                        if (x > 1) {
+                            const idxDown2Left2 = idx + width * 8 - 8;
+                            tempData[idxDown2Left2] = Math.min(255, Math.max(0, tempData[idxDown2Left2] + errR * 1 / divisor));
+                            tempData[idxDown2Left2 + 1] = Math.min(255, Math.max(0, tempData[idxDown2Left2 + 1] + errG * 1 / divisor));
+                            tempData[idxDown2Left2 + 2] = Math.min(255, Math.max(0, tempData[idxDown2Left2 + 2] + errB * 1 / divisor));
+                        }
+                        if (x > 0) {
+                            const idxDown2Left = idx + width * 8 - 4;
+                            tempData[idxDown2Left] = Math.min(255, Math.max(0, tempData[idxDown2Left] + errR * 2 / divisor));
+                            tempData[idxDown2Left + 1] = Math.min(255, Math.max(0, tempData[idxDown2Left + 1] + errG * 2 / divisor));
+                            tempData[idxDown2Left + 2] = Math.min(255, Math.max(0, tempData[idxDown2Left + 2] + errB * 2 / divisor));
+                        }
+                        const idxDown2 = idx + width * 8;
+                        tempData[idxDown2] = Math.min(255, Math.max(0, tempData[idxDown2] + errR * 4 / divisor));
+                        tempData[idxDown2 + 1] = Math.min(255, Math.max(0, tempData[idxDown2 + 1] + errG * 4 / divisor));
+                        tempData[idxDown2 + 2] = Math.min(255, Math.max(0, tempData[idxDown2 + 2] + errB * 4 / divisor));
+                        if (x + 1 < width) {
+                            const idxDown2Right = idx + width * 8 + 4;
+                            tempData[idxDown2Right] = Math.min(255, Math.max(0, tempData[idxDown2Right] + errR * 2 / divisor));
+                            tempData[idxDown2Right + 1] = Math.min(255, Math.max(0, tempData[idxDown2Right + 1] + errG * 2 / divisor));
+                            tempData[idxDown2Right + 2] = Math.min(255, Math.max(0, tempData[idxDown2Right + 2] + errB * 2 / divisor));
+                        }
+                        if (x + 2 < width) {
+                            const idxDown2Right2 = idx + width * 8 + 8;
+                            tempData[idxDown2Right2] = Math.min(255, Math.max(0, tempData[idxDown2Right2] + errR * 1 / divisor));
+                            tempData[idxDown2Right2 + 1] = Math.min(255, Math.max(0, tempData[idxDown2Right2 + 1] + errG * 1 / divisor));
+                            tempData[idxDown2Right2 + 2] = Math.min(255, Math.max(0, tempData[idxDown2Right2 + 2] + errB * 1 / divisor));
+                        }
+                    }
+                }
+            }
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const r = tempData[idx];
+                    const g = tempData[idx + 1];
+                    const b = tempData[idx + 2];
+
+                    const closest = findClosestColor(r, g, b);
+                    data[idx] = closest.r;
+                    data[idx + 1] = closest.g;
+                    data[idx + 2] = closest.b;
+                }
+            }
+
+            return imageData;
+        }
+
+        function jarvisDither(imageData, strength) {
+            const width = imageData.width;
+            const height = imageData.height;
+            const data = imageData.data;
+            const tempData = new Uint8ClampedArray(data);
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const r = tempData[idx];
+                    const g = tempData[idx + 1];
+                    const b = tempData[idx + 2];
+
+                    const closest = findClosestColor(r, g, b);
+
+                    const errR = (r - closest.r) * strength;
+                    const errG = (g - closest.g) * strength;
+                    const errB = (b - closest.b) * strength;
+
+                    const divisor = 48;
+
+                    if (x + 1 < width) {
+                        const idxRight = idx + 4;
+                        tempData[idxRight] = Math.min(255, Math.max(0, tempData[idxRight] + errR * 7 / divisor));
+                        tempData[idxRight + 1] = Math.min(255, Math.max(0, tempData[idxRight + 1] + errG * 7 / divisor));
+                        tempData[idxRight + 2] = Math.min(255, Math.max(0, tempData[idxRight + 2] + errB * 7 / divisor));
+                    }
+                    if (x + 2 < width) {
+                        const idxRight2 = idx + 8;
+                        tempData[idxRight2] = Math.min(255, Math.max(0, tempData[idxRight2] + errR * 5 / divisor));
+                        tempData[idxRight2 + 1] = Math.min(255, Math.max(0, tempData[idxRight2 + 1] + errG * 5 / divisor));
+                        tempData[idxRight2 + 2] = Math.min(255, Math.max(0, tempData[idxRight2 + 2] + errB * 5 / divisor));
+                    }
+                    if (y + 1 < height) {
+                        if (x > 1) {
+                            const idxDownLeft2 = idx + width * 4 - 8;
+                            tempData[idxDownLeft2] = Math.min(255, Math.max(0, tempData[idxDownLeft2] + errR * 3 / divisor));
+                            tempData[idxDownLeft2 + 1] = Math.min(255, Math.max(0, tempData[idxDownLeft2 + 1] + errG * 3 / divisor));
+                            tempData[idxDownLeft2 + 2] = Math.min(255, Math.max(0, tempData[idxDownLeft2 + 2] + errB * 3 / divisor));
+                        }
+                        if (x > 0) {
+                            const idxDownLeft = idx + width * 4 - 4;
+                            tempData[idxDownLeft] = Math.min(255, Math.max(0, tempData[idxDownLeft] + errR * 5 / divisor));
+                            tempData[idxDownLeft + 1] = Math.min(255, Math.max(0, tempData[idxDownLeft + 1] + errG * 5 / divisor));
+                            tempData[idxDownLeft + 2] = Math.min(255, Math.max(0, tempData[idxDownLeft + 2] + errB * 5 / divisor));
+                        }
+                        const idxDown = idx + width * 4;
+                        tempData[idxDown] = Math.min(255, Math.max(0, tempData[idxDown] + errR * 7 / divisor));
+                        tempData[idxDown + 1] = Math.min(255, Math.max(0, tempData[idxDown + 1] + errG * 7 / divisor));
+                        tempData[idxDown + 2] = Math.min(255, Math.max(0, tempData[idxDown + 2] + errB * 7 / divisor));
+                        if (x + 1 < width) {
+                            const idxDownRight = idx + width * 4 + 4;
+                            tempData[idxDownRight] = Math.min(255, Math.max(0, tempData[idxDownRight] + errR * 5 / divisor));
+                            tempData[idxDownRight + 1] = Math.min(255, Math.max(0, tempData[idxDownRight + 1] + errG * 5 / divisor));
+                            tempData[idxDownRight + 2] = Math.min(255, Math.max(0, tempData[idxDownRight + 2] + errB * 5 / divisor));
+                        }
+                        if (x + 2 < width) {
+                            const idxDownRight2 = idx + width * 4 + 8;
+                            tempData[idxDownRight2] = Math.min(255, Math.max(0, tempData[idxDownRight2] + errR * 3 / divisor));
+                            tempData[idxDownRight2 + 1] = Math.min(255, Math.max(0, tempData[idxDownRight2 + 1] + errG * 3 / divisor));
+                            tempData[idxDownRight2 + 2] = Math.min(255, Math.max(0, tempData[idxDownRight2 + 2] + errB * 3 / divisor));
+                        }
+                    }
+                    if (y + 2 < height) {
+                        if (x > 1) {
+                            const idxDown2Left2 = idx + width * 8 - 8;
+                            tempData[idxDown2Left2] = Math.min(255, Math.max(0, tempData[idxDown2Left2] + errR * 1 / divisor));
+                            tempData[idxDown2Left2 + 1] = Math.min(255, Math.max(0, tempData[idxDown2Left2 + 1] + errG * 1 / divisor));
+                            tempData[idxDown2Left2 + 2] = Math.min(255, Math.max(0, tempData[idxDown2Left2 + 2] + errB * 1 / divisor));
+                        }
+                        if (x > 0) {
+                            const idxDown2Left = idx + width * 8 - 4;
+                            tempData[idxDown2Left] = Math.min(255, Math.max(0, tempData[idxDown2Left] + errR * 3 / divisor));
+                            tempData[idxDown2Left + 1] = Math.min(255, Math.max(0, tempData[idxDown2Left + 1] + errG * 3 / divisor));
+                            tempData[idxDown2Left + 2] = Math.min(255, Math.max(0, tempData[idxDown2Left + 2] + errB * 3 / divisor));
+                        }
+                        const idxDown2 = idx + width * 8;
+                        tempData[idxDown2] = Math.min(255, Math.max(0, tempData[idxDown2] + errR * 5 / divisor));
+                        tempData[idxDown2 + 1] = Math.min(255, Math.max(0, tempData[idxDown2 + 1] + errG * 5 / divisor));
+                        tempData[idxDown2 + 2] = Math.min(255, Math.max(0, tempData[idxDown2 + 2] + errB * 5 / divisor));
+                        if (x + 1 < width) {
+                            const idxDown2Right = idx + width * 8 + 4;
+                            tempData[idxDown2Right] = Math.min(255, Math.max(0, tempData[idxDown2Right] + errR * 3 / divisor));
+                            tempData[idxDown2Right + 1] = Math.min(255, Math.max(0, tempData[idxDown2Right + 1] + errG * 3 / divisor));
+                            tempData[idxDown2Right + 2] = Math.min(255, Math.max(0, tempData[idxDown2Right + 2] + errB * 3 / divisor));
+                        }
+                        if (x + 2 < width) {
+                            const idxDown2Right2 = idx + width * 8 + 8;
+                            tempData[idxDown2Right2] = Math.min(255, Math.max(0, tempData[idxDown2Right2] + errR * 1 / divisor));
+                            tempData[idxDown2Right2 + 1] = Math.min(255, Math.max(0, tempData[idxDown2Right2 + 1] + errG * 1 / divisor));
+                            tempData[idxDown2Right2 + 2] = Math.min(255, Math.max(0, tempData[idxDown2Right2 + 2] + errB * 1 / divisor));
+                        }
+                    }
+                }
+            }
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const r = tempData[idx];
+                    const g = tempData[idx + 1];
+                    const b = tempData[idx + 2];
+
+                    const closest = findClosestColor(r, g, b);
+                    data[idx] = closest.r;
+                    data[idx + 1] = closest.g;
+                    data[idx + 2] = closest.b;
+                }
+            }
+
+            return imageData;
+        }
+
+        function ditherImage(imageData) {
+            const ditherType = document.getElementById('ditherType').value;
+            const ditherStrength = parseFloat(document.getElementById('ditherStrength').value);
+
+            switch (ditherType) {
+                case 'floydSteinberg':
+                    return floydSteinbergDither(imageData, ditherStrength);
+                case 'atkinson':
+                    return atkinsonDither(imageData, ditherStrength);
+                case 'stucki':
+                    return stuckiDither(imageData, ditherStrength);
+                case 'jarvis':
+                    return jarvisDither(imageData, ditherStrength);
+                default:
+                    return imageData;
+            }
+        }
+
+        function processImageData(imageData) {
+            const width = imageData.width;
+            const height = imageData.height;
+            const data = imageData.data;
+            let processedData;
+            console.log("Image Data Length:", data.length);
+  for (let i = 0; i < Math.min(data.length, 240000); i += 4) {
+    console.log(`Pixel ${i / 4}: R=${data[i]}, G=${data[i+1]}, B=${data[i+2]}, A=${data[i+3]}`);
+  }
+            const mode = document.getElementById('ditherMode').value;
+
+
+
+if (mode === 'sixColor') {
+    const width = imageData.width;
+    const height = imageData.height;
+    const data = imageData.data;
+    const processedData = new Uint8Array(Math.ceil((width * height) / 2));  // 每个字节存储2个像素
+
+    // 将 RGB 转换为 6 色模式
+    function rgbToSixColor(r, g, b) {
+        if (r < 128 && g < 128 && b < 128) return 0x00;  // 黑色
+        if (r > 128 && g > 128 && b > 128) return 0x01;  // 白色
+        if (r > 128 && g < 128 && b < 128) return 0x03;  // 红色
+        if (r > 128 && g > 128 && b < 128) return 0x02;  // 黄色
+        if (r < 128 && g > 128 && b < 128) return 0x06;  // 绿色
+        if (r < 128 && g < 128 && b > 128) return 0x05;  // 蓝色
+        return 0x01;  // 默认白色
+    }
+
+    // 处理图像数据
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x += 2) { // 每两个像素处理一次
+            const index1 = (y * width + x) * 4;       // 第一个像素的索引
+            const index2 = (y * width + x + 1) * 4;   // 第二个像素的索引
+
+            // 获取两个像素的颜色值
+            const r1 = data[index1];
+            const g1 = data[index1 + 1];
+            const b1 = data[index1 + 2];
+
+            const r2 = data[index2];
+            const g2 = data[index2 + 1];
+            const b2 = data[index2 + 2];
+
+            // 将 RGB 转换为 6 色模式
+            const colorValue1 = rgbToSixColor(r1, g1, b1);
+            const colorValue2 = rgbToSixColor(r2, g2, b2);
+
+            // 组合成一个字节，每两个4位颜色值组成一个字节
+            const combinedValue = (colorValue1 << 4) | colorValue2;
+
+            // 计算在 processedData 中的索引
+            const newIndex = (y * (width / 2)) + (x / 2);
+            processedData[newIndex] = combinedValue;
+        }
+    }
+
+  
+
+    return processedData;
+}
+                 
+            else if (mode === 'fourColor') {
+                const width = imageData.width;
+    const height = imageData.height;
+    const data = imageData.data;
+    const processedData = new Uint8Array(Math.ceil((width * height) / 4));  // 计算4灰度模式的数组大小
+
+    // 将RGB颜色转换为4灰度模式中的灰度值
+    function rgbToGray(r, g, b) {
+        const grayscale = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+        if (grayscale < 64) return 0x03;  // 黑色
+        if (grayscale < 128) return 0x02; // 红色
+        if (grayscale < 140) return 0x00; // 黄色
+        if (grayscale < 255) return 0x01; // 白色
+    }
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const index = (y * width + x) * 4;
+            const r = data[index];
+            const g = data[index + 1];
+            const b = data[index + 2];
+            const a = data[index + 3];  // 透明度值
+            const grayValue = rgbToGray(r, g, b);
+            // 垂直翻转
+           // const newIndex = ((height - 1 - y) * width + x) / 4 | 0;
+           const newIndex = (y * width + x) / 4 | 0;
+            // 将灰度值存储到processedData中
+            const shift = 6 - ((x % 4) * 2);  // 计算每个像素在字节中的位置
+            processedData[newIndex] |= (grayValue << shift);
+        }
+    }
+
+    return processedData;  // 返回的数组大小是 15,000 字节
+        }
+      else if (mode === 'blackWhiteColor') {
+        const width = imageData.width;
+    const height = imageData.height;
+    const data = imageData.data;
+    const byteWidth = Math.ceil(width / 8);  // 计算每行字节的宽度
+    const processedData = new Uint8Array(byteWidth * height);
+
+    // 设置黑白转换的阈值
+    const threshold = 140;  // 你可以调整这个阈值来改变黑白分界线
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const index = (y * width + x) * 4;
+            const r = data[index];
+            const g = data[index + 1];
+            const b = data[index + 2];
+            // 计算灰度值
+            const grayscale = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+            // 根据阈值决定黑白
+            const bit = grayscale >= threshold ? 1 : 0;
+            // 计算当前字节中的位置
+            const byteIndex = y * byteWidth + Math.floor(x / 8);
+            const bitIndex = 7 - (x % 8);  // 从高位到低位
+            // 设置相应的位
+            processedData[byteIndex] |= (bit << bitIndex);
+        }
+    }
+
+    return processedData;
+   
+    }    else if (mode === 'threeColor') {
+    const byteWidth = Math.ceil(width / 8); // 每个像素占用1位，一个字节可以存储8个像素
+    const blackWhiteThreshold = 140;  // 黑白阈值
+    const redThreshold = 160;  // 红色阈值
+
+    // 创建两个 Uint8Array 用于存储黑白和红白数据
+    const blackWhiteData = new Uint8Array(height * byteWidth);
+    const redWhiteData = new Uint8Array(height * byteWidth);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const index = (y * width + x) * 4;
+            const r = data[index];
+            const g = data[index + 1];
+            const b = data[index + 2];
+            const grayscale = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+
+            // 黑白处理
+            const blackWhiteBit = grayscale >= blackWhiteThreshold ? 1 : 0; // 1表示白色，0表示黑色
+            const blackWhiteByteIndex = y * byteWidth + Math.floor(x / 8);
+            const blackWhiteBitIndex = 7 - (x % 8);
+            if (blackWhiteBit) {
+                blackWhiteData[blackWhiteByteIndex] |= (0x01 << blackWhiteBitIndex);  // 写入白色
+            } else {
+                blackWhiteData[blackWhiteByteIndex] &= ~(0x01 << blackWhiteBitIndex);  // 写入黑色
+            }
+
+            // 红白处理
+            // 使用红色和白色的组合逻辑
+            const redWhiteBit = (r > redThreshold && r > g && r > b) ? 0 : 1; // 0表示红色，1表示白色
+            const redWhiteByteIndex = y * byteWidth + Math.floor(x / 8);
+            const redWhiteBitIndex = 7 - (x % 8);
+            if (redWhiteBit) {
+                redWhiteData[redWhiteByteIndex] |= (0x01 << redWhiteBitIndex);  // 写入白色数据位为1
+            } else {
+                redWhiteData[redWhiteByteIndex] &= ~(0x01 << redWhiteBitIndex);  // 写入红色数据位为0
+            }
+        }
+    }
+
+    // 合并两个数组
+    const processedData = new Uint8Array(blackWhiteData.length + redWhiteData.length);
+    processedData.set(blackWhiteData, 0);  // 将黑白数据放在前半部分
+    processedData.set(redWhiteData, blackWhiteData.length);  // 将红白数据放在后半部分
+
+    console.log("BlackWhiteData:", blackWhiteData);
+    console.log("RedWhiteData:", redWhiteData);
+    console.log("ProcessedData:", processedData);
+
+    return processedData;
+}
+
+}
+
+        function downloadImage() {
+            const canvas = document.getElementById('canvas');
+            const dataURL = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = 'dithered_image.png';
+            link.click();
+        }
+
+        async function sendToESP32() {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const processedData = processImageData(imageData);
+            const esp32IP = document.getElementById('esp32-ip').value.trim() || '192.168.4.1';
+            const CHUNK_SIZE = 960000;
+            const DELAY_TIME = 5000;
+
+            if (!esp32IP) {
+                alert('Please enter the IP address of the ESP32 first');
+                return;
+            }
+
+            try {
+                const totalChunks = Math.ceil(processedData.length / CHUNK_SIZE);
+                for (let i = 0; i < totalChunks; i++) {
+                    const chunk = processedData.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+                    const blob = new Blob([chunk], { type: 'application/octet-stream' });
+
+                    const formData = new FormData();
+                    formData.append('data', blob, 'image_data.bin');
+
+                    const response = await fetch(`http://${esp32IP}/upload`, {
+                        method: 'POST',
+                        body: formData,
+                        mode: 'cors'
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Error: ${response.statusText}`);
+                    }
+
+                    const responseText = await response.text();
+                    console.log(`Server response: ${responseText}`);
+
+                    if (responseText.includes("文件上传成功")) {
+                        alert('Image data has been successfully uploaded to ESP32.');
+                        break;
+                    }
+
+                    await new Promise(resolve => setTimeout(resolve, DELAY_TIME));
+                }
+            } catch (error) {
+                console.error('Failed to send data:', error);
+                alert('Unable to send data to ESP32 via Wi-Fi');
+            }
+        }
+
+        async function switchToRealTime() {
+            const esp32IP = document.getElementById('esp32-ip').value.trim() || '192.168.4.1';
+            if (!esp32IP) {
+                alert('Please enter the IP address of ESP32 first');
+                return;
+            }
+            try {
+                const response = await fetch(`http://${esp32IP}/switchToRealTime`, {
+                    method: 'POST',
+                    mode: 'cors'
+                });
+                if (!response.ok) {
+                    throw new Error(`Error: ${response.statusText}`);
+                }
+                const responseText = await response.text();
+                console.log(`Server response: ${responseText}`);
+                if (responseText.includes("切换到实时模式成功")) {
+                    alert('Successfully switched to real-time mode');
+                }
+            } catch (error) {
+                console.error('Failed to switch to real-time mode:', error);
+                alert('Failed to switch to real-time mode');
+            }
+        }
+
+        async function switchToSlideShow() {
+            const esp32IP = document.getElementById('esp32-ip').value.trim() || '192.168.4.1';
+            if (!esp32IP) {
+                alert('Please enter the ESP32 IP address first');
+                return;
+            }
+            try {
+                const response = await fetch(`http://${esp32IP}/switchToSlideShow`, {
+                    method: 'POST',
+                    mode: 'cors'
+                });
+                if (!response.ok) {
+                    throw new Error(`Error: ${response.statusText}`);
+                }
+                const responseText = await response.text();
+                console.log(`Server response: ${responseText}`);
+                if (responseText.includes("切换到轮播模式成功")) {
+                    alert('Successfully switched to slideshow mode');
+                }
+            } catch (error) {
+                console.error('Failed to switch to slideshow mode:', error);
+                alert('Failed to switch to slideshow mode');
+            }
+        }
+
+        function downloadDataArray() {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const processedData = processImageData(imageData);
+
+            let dataString = 'const unsigned char gImage[] = {\n';
+            for (let i = 0; i < processedData.length; i++) {
+                dataString += `0x${processedData[i].toString(16).padStart(2, '0')}`;
+                if (i !== processedData.length - 1) dataString += ', ';
+                if ((i + 1) % 16 === 0) dataString += '\n';
+            }
+            dataString += '\n};';
+
+            const blob = new Blob([dataString], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.download = 'image_data_array.c';
+            link.href = url;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+
+</body></html>
