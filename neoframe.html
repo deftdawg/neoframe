@@ -741,7 +741,7 @@
             ctx.drawImage(offscreenCanvas, 0, 0);
 
             // 4. Draw QR Code if enabled
-            drawQrCode(ctx, imageBoundingBox);
+            drawQrCode(ctx, imageBoundingBox, scale);
         }
 
         function getRotatedQrPosition(position, rotation) {
@@ -757,7 +757,7 @@
             return positions[newIndex];
         }
 
-        function drawQrCode(ctx, imageRect) {
+        function drawQrCode(ctx, imageRect, scale) {
             if (!document.getElementById('qr-code-toggle').checked) return;
 
             const contentType = document.getElementById('qr-content-type').value;
@@ -783,21 +783,22 @@
                             }
                         }
                         qrContent = exifString || "No EXIF data found.";
-                        generateAndDrawQrCode(ctx, qrContent, imageRect);
+                        generateAndDrawQrCode(ctx, qrContent, imageRect, scale);
                     });
                     return;
             }
 
-            generateAndDrawQrCode(ctx, qrContent, imageRect);
+            generateAndDrawQrCode(ctx, qrContent, imageRect, scale);
         }
 
-        function generateAndDrawQrCode(ctx, content, imageRect) {
+        function generateAndDrawQrCode(ctx, content, imageRect, scale) {
             const qrColor = document.getElementById('qr-color').value;
             const borderColor = document.getElementById('qr-border-color').value;
             const originalPosition = document.getElementById('qr-position').value;
             const rotation = parseInt(document.getElementById('rotation').value, 10);
             const position = getRotatedQrPosition(originalPosition, rotation);
             const margin = parseInt(document.getElementById('qr-margin').value, 10);
+            const scaledMargin = margin / scale;
 
             try {
                 const qr = qrcode(0, 'L');
@@ -841,20 +842,20 @@
                 let x = 0, y = 0;
                 switch (position) {
                     case 'bottom-right':
-                        x = visibleX2 - borderedSize - margin;
-                        y = visibleY2 - borderedSize - margin;
+                        x = visibleX2 - borderedSize - scaledMargin;
+                        y = visibleY2 - borderedSize - scaledMargin;
                         break;
                     case 'bottom-left':
-                        x = visibleX1 + margin;
-                        y = visibleY2 - borderedSize - margin;
+                        x = visibleX1 + scaledMargin;
+                        y = visibleY2 - borderedSize - scaledMargin;
                         break;
                     case 'top-right':
-                        x = visibleX2 - borderedSize - margin;
-                        y = visibleY1 + margin;
+                        x = visibleX2 - borderedSize - scaledMargin;
+                        y = visibleY1 + scaledMargin;
                         break;
                     case 'top-left':
-                        x = visibleX1 + margin;
-                        y = visibleY1 + margin;
+                        x = visibleX1 + scaledMargin;
+                        y = visibleY1 + scaledMargin;
                         break;
                 }
 
