@@ -644,7 +644,8 @@
             offscreenCtx.fillRect(0, 0, frameWidth, frameHeight);
 
             // 1. Draw original image to offscreen canvas with selected scaling
-            let scale, scaledWidth, scaledHeight, drawX, drawY;
+            let scale;
+            const imageBoundingBox = { x: 0, y: 0, width: 0, height: 0 };
 
             let baseScale;
             switch (scalingMode) {
@@ -652,28 +653,28 @@
                 case 'fit_8x10':
                     baseScale = Math.min(frameWidth / sourceImage.width, frameHeight / sourceImage.height);
                     scale = scalingMode === 'fit_8x10' ? baseScale * size8x10Scaler : baseScale;
-                    scaledWidth = sourceImage.width * scale;
-                    scaledHeight = sourceImage.height * scale;
-                    drawX = (frameWidth - scaledWidth) / 2;
-                    drawY = (frameHeight - scaledHeight) / 2;
-                    offscreenCtx.drawImage(sourceImage, drawX, drawY, scaledWidth, scaledHeight);
+                    imageBoundingBox.width = sourceImage.width * scale;
+                    imageBoundingBox.height = sourceImage.height * scale;
+                    imageBoundingBox.x = (frameWidth - imageBoundingBox.width) / 2;
+                    imageBoundingBox.y = (frameHeight - imageBoundingBox.height) / 2;
+                    offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'original':
                     scale = 1.0;
-                    scaledWidth = sourceImage.width;
-                    scaledHeight = sourceImage.height;
-                    drawX = (frameWidth - scaledWidth) / 2;
-                    drawY = (frameHeight - scaledHeight) / 2;
-                    offscreenCtx.drawImage(sourceImage, drawX, drawY, scaledWidth, scaledHeight);
+                    imageBoundingBox.width = sourceImage.width * scale;
+                    imageBoundingBox.height = sourceImage.height * scale;
+                    imageBoundingBox.x = (frameWidth - imageBoundingBox.width) / 2;
+                    imageBoundingBox.y = (frameHeight - imageBoundingBox.height) / 2;
+                    offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'custom':
                     const customScaleValue = parseInt(document.getElementById('customScale').value, 10);
                     scale = customScaleValue / 100;
-                    scaledWidth = sourceImage.width * scale;
-                    scaledHeight = sourceImage.height * scale;
-                    drawX = (frameWidth - scaledWidth) / 2;
-                    drawY = (frameHeight - scaledHeight) / 2;
-                    offscreenCtx.drawImage(sourceImage, drawX, drawY, scaledWidth, scaledHeight);
+                    imageBoundingBox.width = sourceImage.width * scale;
+                    imageBoundingBox.height = sourceImage.height * scale;
+                    imageBoundingBox.x = (frameWidth - imageBoundingBox.width) / 2;
+                    imageBoundingBox.y = (frameHeight - imageBoundingBox.height) / 2;
+                    offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'fill':
                 case 'fill_8x10':
@@ -692,10 +693,10 @@
                         frameWidth, frameHeight
                     );
                     // For fill modes, the image bounding box is the full canvas
-                    drawX = 0;
-                    drawY = 0;
-                    scaledWidth = frameWidth;
-                    scaledHeight = frameHeight;
+                    imageBoundingBox.x = 0;
+                    imageBoundingBox.y = 0;
+                    imageBoundingBox.width = frameWidth;
+                    imageBoundingBox.height = frameHeight;
                     break;
             }
 
@@ -722,7 +723,7 @@
             ctx.drawImage(offscreenCanvas, 0, 0);
 
             // 4. Draw QR Code if enabled
-            drawQrCode(ctx, { x: drawX, y: drawY, width: scaledWidth, height: scaledHeight });
+            drawQrCode(ctx, imageBoundingBox);
         }
 
         function getRotatedQrPosition(position, rotation) {
