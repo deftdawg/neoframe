@@ -815,23 +815,28 @@
                 borderedCtx.fillRect(0, 0, borderedSize, borderedSize);
                 borderedCtx.drawImage(qrCanvas, borderSize, borderSize);
 
+                const visibleX1 = Math.max(0, imageRect.x);
+                const visibleY1 = Math.max(0, imageRect.y);
+                const visibleX2 = Math.min(imageRect.x + imageRect.width, ctx.canvas.width);
+                const visibleY2 = Math.min(imageRect.y + imageRect.height, ctx.canvas.height);
+
                 let x = 0, y = 0;
                 switch (position) {
                     case 'bottom-right':
-                        x = imageRect.x + imageRect.width - borderedSize - margin;
-                        y = imageRect.y + imageRect.height - borderedSize - margin;
+                        x = visibleX2 - borderedSize - margin;
+                        y = visibleY2 - borderedSize - margin;
                         break;
                     case 'bottom-left':
-                        x = imageRect.x + margin;
-                        y = imageRect.y + imageRect.height - borderedSize - margin;
+                        x = visibleX1 + margin;
+                        y = visibleY2 - borderedSize - margin;
                         break;
                     case 'top-right':
-                        x = imageRect.x + imageRect.width - borderedSize - margin;
-                        y = imageRect.y + margin;
+                        x = visibleX2 - borderedSize - margin;
+                        y = visibleY1 + margin;
                         break;
                     case 'top-left':
-                        x = imageRect.x + margin;
-                        y = imageRect.y + margin;
+                        x = visibleX1 + margin;
+                        y = visibleY1 + margin;
                         break;
                 }
 
