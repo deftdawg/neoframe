@@ -492,9 +492,17 @@
         const qrCustomTextContainer = document.getElementById('qr-custom-text-container');
         let qrDebounceTimer;
 
-        qrCodeToggle.addEventListener('change', () => {
+        function syncQrCodeOptionsVisibility() {
             qrCodeOptions.style.display = qrCodeToggle.checked ? 'block' : 'none';
+        }
+
+        qrCodeToggle.addEventListener('change', () => {
+            syncQrCodeOptionsVisibility();
             updateImage();
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            syncQrCodeOptionsVisibility();
         });
 
         qrContentType.addEventListener('change', () => {
