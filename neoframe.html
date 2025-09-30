@@ -508,6 +508,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             syncQrCodeOptionsVisibility();
             syncQrCodeCustomTextVisibility();
+            syncCustomScalingVisibility();
         });
 
         qrContentType.addEventListener('change', () => {
@@ -529,10 +530,14 @@
         document.getElementById('qr-color').addEventListener('change', updateImage);
         document.getElementById('qr-border-color').addEventListener('change', updateImage);
 
-        document.getElementById('scaling').addEventListener('change', () => {
+        function syncCustomScalingVisibility() {
             const scalingMode = document.getElementById('scaling').value;
             const customScalingContainer = document.getElementById('custom-scaling-container');
             customScalingContainer.style.display = scalingMode === 'custom' ? 'flex' : 'none';
+        }
+
+        document.getElementById('scaling').addEventListener('change', () => {
+            syncCustomScalingVisibility();
             updateImage();
         });
 
