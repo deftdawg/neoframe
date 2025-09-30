@@ -501,12 +501,17 @@
             updateImage();
         });
 
+        function syncQrCodeCustomTextVisibility() {
+            qrCustomTextContainer.style.display = qrContentType.value === 'custom' ? 'block' : 'none';
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             syncQrCodeOptionsVisibility();
+            syncQrCodeCustomTextVisibility();
         });
 
         qrContentType.addEventListener('change', () => {
-            qrCustomTextContainer.style.display = qrContentType.value === 'custom' ? 'block' : 'none';
+            syncQrCodeCustomTextVisibility();
             if (qrContentType.value === 'custom') {
                 document.getElementById('qr-custom-text').value = window.location.href;
             }
