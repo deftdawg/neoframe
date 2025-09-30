@@ -594,6 +594,19 @@
             drawQrCode(ctx, { x: drawX, y: drawY, width: scaledWidth, height: scaledHeight });
         }
 
+        function getRotatedQrPosition(position, rotation) {
+            const positions = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
+            const currentIndex = positions.indexOf(position);
+
+            // Calculate the rotation offset: 90 degrees = 1 step, 180 = 2, etc.
+            const rotationOffset = rotation / 90;
+
+            // Apply the offset and wrap around using modulo
+            const newIndex = (currentIndex + rotationOffset) % 4;
+
+            return positions[newIndex];
+        }
+
         function drawQrCode(ctx, imageRect) {
             if (!document.getElementById('qr-code-toggle').checked) return;
 
@@ -620,10 +633,9 @@
                             }
                         }
                         qrContent = exifString || "No EXIF data found.";
-                        // Because this is async, we need to re-draw the QR code part
                         generateAndDrawQrCode(ctx, qrContent, imageRect);
                     });
-                    return; // Exit because the actual drawing will happen in the callback
+                    return;
             }
 
             generateAndDrawQrCode(ctx, qrContent, imageRect);
@@ -632,7 +644,9 @@
         function generateAndDrawQrCode(ctx, content, imageRect) {
             const qrColor = document.getElementById('qr-color').value;
             const borderColor = document.getElementById('qr-border-color').value;
-            const position = document.getElementById('qr-position').value;
+            const originalPosition = document.getElementById('qr-position').value;
+            const rotation = parseInt(document.getElementById('rotation').value, 10);
+            const position = getRotatedQrPosition(originalPosition, rotation);
             const margin = parseInt(document.getElementById('qr-margin').value, 10);
 
             try {
@@ -693,7 +707,6 @@
 
             } catch (e) {
                 console.error("Error generating QR code:", e);
-                // Optionally, display an error to the user on the canvas
                 ctx.fillStyle = 'red';
                 ctx.font = '20px Arial';
                 ctx.fillText('Error generating QR code', 10, 50);
