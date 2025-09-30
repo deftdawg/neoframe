@@ -137,6 +137,44 @@
             justify-content: center;
             gap: 10px;
         }
+
+        .ip-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #esp32-ip {
+            flex-grow: 1;
+            padding: 8px;
+            border-radius: 5px;
+            border: none;
+            background-color: #1f4068;
+            color: #e5e5e5;
+        }
+
+        #online-status-indicator {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background-color: #6c757d; /* Grey - default/checking */
+            transition: background-color 0.5s ease;
+            flex-shrink: 0;
+        }
+
+        #online-status-indicator.online {
+            background-color: #28a745; /* Green */
+        }
+
+        #online-status-indicator.offline {
+            background-color: #dc3545; /* Red */
+        }
+
+        #status-container {
+            font-size: 0.8em;
+            margin-top: 8px;
+            color: #aaa;
+        }
         #progressBar {
             width: 100%;
             height: 8px;
@@ -207,9 +245,17 @@
                 <label for="upload" class="file-label">Upload Image</label>
                 <input type="file" id="upload" accept="image/*">
             </div>
-            <div class="controls-group"><!-- style="display: none;" -->
+            <div class="controls-group">
                 <label for="esp32-ip">ESP32 IP Address:</label>
-                <input type="text" id="esp32-ip" value="192.168.4.1" placeholder="Enter ESP32 IP Address" style="width: 100%; padding: 8px; border-radius: 5px; border: none; background-color: #1f4068; color: #e5e5e5;">
+                <div class="ip-container">
+                    <input type="text" id="esp32-ip" value="192.168.4.1" placeholder="Enter ESP32 IP Address">
+                    <div id="online-status-indicator" title="Status: Unknown"></div>
+                </div>
+                <div id="status-container">
+                    <span>Last Online: <span id="last-online-time">N/A</span></span>
+                    <span style="margin: 0 5px;">|</span>
+                    <span>Last Checked: <span id="last-checked-time">N/A</span></span>
+                </div>
             </div>
             <div class="controls-group">
                 <label for="ditherMode">Colors Mode:</label>
@@ -353,6 +399,87 @@
         document.getElementById('ditherMode').addEventListener('change', updateImage);
         document.getElementById('ditherType').addEventListener('change', updateImage);
         document.getElementById('rotation').addEventListener('change', updateImage);
+
+        // Health Check Logic
+        const esp32IpInput = document.getElementById('esp32-ip');
+        const onlineStatusIndicator = document.getElementById('online-status-indicator');
+        const lastOnlineTimeSpan = document.getElementById('last-online-time');
+        const lastCheckedTimeSpan = document.getElementById('last-checked-time');
+
+        let healthCheckTimer;
+        let currentCheckInterval = 5000; // Start with 5 seconds
+        const maxCheckInterval = 30000; // 30 seconds
+        const baseCheckInterval = 5000; // 5 seconds
+
+        async function checkEsp32Status() {
+            const ip = esp32IpInput.value.trim();
+            if (!ip) {
+                updateStatus(false, 'IP address is empty.');
+                return;
+            }
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000); // 2-second timeout
+
+            lastCheckedTimeSpan.textContent = new Date().toLocaleTimeString();
+            onlineStatusIndicator.classList.remove('online', 'offline'); // Set to neutral gray
+
+            try {
+                // We expect a 500 error from a healthy frame, which is not a network error.
+                // Any response, even an error response, means the device is on the network.
+                const response = await fetch(`http://${ip}/`, {
+                    method: 'GET',
+                    mode: 'cors', // Important for cross-origin requests, even on a local network
+                    signal: controller.signal
+                });
+                 // If we get here, it's online, regardless of status code
+                updateStatus(true);
+            } catch (error) {
+                // This catches network errors (e.g., unreachable host) or timeouts
+                if (error.name === 'AbortError') {
+                    updateStatus(false, 'Timeout');
+                } else {
+                    updateStatus(false, 'Offline');
+                }
+            } finally {
+                clearTimeout(timeoutId);
+                scheduleNextCheck();
+            }
+        }
+
+        function updateStatus(isOnline, statusText = 'Unknown') {
+            if (isOnline) {
+                onlineStatusIndicator.classList.add('online');
+                onlineStatusIndicator.classList.remove('offline');
+                onlineStatusIndicator.title = 'Status: Online';
+                lastOnlineTimeSpan.textContent = new Date().toLocaleTimeString();
+                currentCheckInterval = baseCheckInterval; // Reset interval on success
+            } else {
+                onlineStatusIndicator.classList.add('offline');
+                onlineStatusIndicator.classList.remove('online');
+                onlineStatusIndicator.title = `Status: Offline (${statusText})`;
+                // Double the interval on failure, up to the max
+                currentCheckInterval = Math.min(currentCheckInterval * 2, maxCheckInterval);
+            }
+        }
+
+        function scheduleNextCheck() {
+            clearTimeout(healthCheckTimer);
+            healthCheckTimer = setTimeout(checkEsp32Status, currentCheckInterval);
+        }
+
+        function startHealthChecks() {
+            currentCheckInterval = baseCheckInterval; // Reset interval
+            clearTimeout(healthCheckTimer);
+            checkEsp32Status();
+        }
+
+        // Start checking when the page loads
+        document.addEventListener('DOMContentLoaded', startHealthChecks);
+
+        // And restart checks if the IP is changed
+        esp32IpInput.addEventListener('change', startHealthChecks);
+
 
         // QR Code Event Listeners
         const qrCodeToggle = document.getElementById('qr-code-toggle');
