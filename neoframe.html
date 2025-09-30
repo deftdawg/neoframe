@@ -359,6 +359,7 @@
         const qrCodeOptions = document.getElementById('qr-code-options');
         const qrContentType = document.getElementById('qr-content-type');
         const qrCustomTextContainer = document.getElementById('qr-custom-text-container');
+        let qrDebounceTimer;
 
         qrCodeToggle.addEventListener('change', () => {
             qrCodeOptions.style.display = qrCodeToggle.checked ? 'block' : 'none';
@@ -367,17 +368,23 @@
 
         qrContentType.addEventListener('change', () => {
             qrCustomTextContainer.style.display = qrContentType.value === 'custom' ? 'block' : 'none';
-            if(qrContentType.value === 'custom'){
+            if (qrContentType.value === 'custom') {
                 document.getElementById('qr-custom-text').value = window.location.href;
             }
             updateImage();
         });
 
-        document.getElementById('qr-custom-text').addEventListener('input', updateImage);
+        const qrUpdateDebounced = () => {
+            clearTimeout(qrDebounceTimer);
+            qrDebounceTimer = setTimeout(updateImage, 500);
+        };
+
+        document.getElementById('qr-custom-text').addEventListener('input', qrUpdateDebounced);
         document.getElementById('qr-position').addEventListener('change', updateImage);
-        document.getElementById('qr-margin').addEventListener('input', updateImage);
+        document.getElementById('qr-margin').addEventListener('input', qrUpdateDebounced);
         document.getElementById('qr-color').addEventListener('change', updateImage);
         document.getElementById('qr-border-color').addEventListener('change', updateImage);
+
         document.getElementById('scaling').addEventListener('change', () => {
             const scalingMode = document.getElementById('scaling').value;
             const customScalingContainer = document.getElementById('custom-scaling-container');
@@ -553,6 +560,11 @@
                         0, 0,
                         frameWidth, frameHeight
                     );
+                    // For fill modes, the image bounding box is the full canvas
+                    drawX = 0;
+                    drawY = 0;
+                    scaledWidth = frameWidth;
+                    scaledHeight = frameHeight;
                     break;
             }
 
@@ -579,10 +591,10 @@
             ctx.drawImage(offscreenCanvas, 0, 0);
 
             // 4. Draw QR Code if enabled
-            drawQrCode(ctx);
+            drawQrCode(ctx, { x: drawX, y: drawY, width: scaledWidth, height: scaledHeight });
         }
 
-        function drawQrCode(ctx) {
+        function drawQrCode(ctx, imageRect) {
             if (!document.getElementById('qr-code-toggle').checked) return;
 
             const contentType = document.getElementById('qr-content-type').value;
@@ -609,20 +621,19 @@
                         }
                         qrContent = exifString || "No EXIF data found.";
                         // Because this is async, we need to re-draw the QR code part
-                        generateAndDrawQrCode(ctx, qrContent);
+                        generateAndDrawQrCode(ctx, qrContent, imageRect);
                     });
                     return; // Exit because the actual drawing will happen in the callback
             }
 
-            generateAndDrawQrCode(ctx, qrContent);
+            generateAndDrawQrCode(ctx, qrContent, imageRect);
         }
 
-        function generateAndDrawQrCode(ctx, content) {
+        function generateAndDrawQrCode(ctx, content, imageRect) {
             const qrColor = document.getElementById('qr-color').value;
             const borderColor = document.getElementById('qr-border-color').value;
             const position = document.getElementById('qr-position').value;
             const margin = parseInt(document.getElementById('qr-margin').value, 10);
-            const canvas = ctx.canvas;
 
             try {
                 const qr = qrcode(0, 'L');
@@ -661,20 +672,20 @@
                 let x = 0, y = 0;
                 switch (position) {
                     case 'bottom-right':
-                        x = canvas.width - borderedSize - margin;
-                        y = canvas.height - borderedSize - margin;
+                        x = imageRect.x + imageRect.width - borderedSize - margin;
+                        y = imageRect.y + imageRect.height - borderedSize - margin;
                         break;
                     case 'bottom-left':
-                        x = margin;
-                        y = canvas.height - borderedSize - margin;
+                        x = imageRect.x + margin;
+                        y = imageRect.y + imageRect.height - borderedSize - margin;
                         break;
                     case 'top-right':
-                        x = canvas.width - borderedSize - margin;
-                        y = margin;
+                        x = imageRect.x + imageRect.width - borderedSize - margin;
+                        y = imageRect.y + margin;
                         break;
                     case 'top-left':
-                        x = margin;
-                        y = margin;
+                        x = imageRect.x + margin;
+                        y = imageRect.y + margin;
                         break;
                 }
 
