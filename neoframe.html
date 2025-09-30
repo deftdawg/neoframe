@@ -1485,8 +1485,7 @@ if (mode === 'sixColor') {
         }
 
         async function sendToESP32() {
-            clearTimeout(healthCheckTimer); // Pause health checks
-
+            updateStatus(true); // Proactively set status to online
             const canvas = document.getElementById('canvas');
             const ctx = canvas.getContext('2d');
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -1497,7 +1496,6 @@ if (mode === 'sixColor') {
 
             if (!esp32IP) {
                 alert('Please enter the IP address of the ESP32 first');
-                startHealthChecks(); // Resume health checks
                 return;
             }
 
@@ -1534,17 +1532,14 @@ if (mode === 'sixColor') {
             } catch (error) {
                 console.error('Failed to send data:', error);
                 alert('Unable to send data to ESP32 via Wi-Fi');
-            } finally {
-                startHealthChecks(); // Resume health checks
             }
         }
 
         async function switchToRealTime() {
-            clearTimeout(healthCheckTimer); // Pause health checks
+            updateStatus(true); // Proactively set status to online
             const esp32IP = document.getElementById('esp32-ip').value.trim() || '192.168.4.1';
             if (!esp32IP) {
                 alert('Please enter the IP address of ESP32 first');
-                startHealthChecks(); // Resume health checks
                 return;
             }
             try {
@@ -1564,17 +1559,14 @@ if (mode === 'sixColor') {
             } catch (error) {
                 console.error('Failed to switch to real-time mode:', error);
                 alert('Failed to switch to real-time mode');
-            } finally {
-                startHealthChecks(); // Resume health checks
             }
         }
 
         async function switchToSlideShow() {
-            clearTimeout(healthCheckTimer); // Pause health checks
+            updateStatus(true); // Proactively set status to online
             const esp32IP = document.getElementById('esp32-ip').value.trim() || '192.168.4.1';
             if (!esp32IP) {
                 alert('Please enter the ESP32 IP address first');
-                startHealthChecks(); // Resume health checks
                 return;
             }
             try {
@@ -1594,8 +1586,6 @@ if (mode === 'sixColor') {
             } catch (error) {
                 console.error('Failed to switch to slideshow mode:', error);
                 alert('Failed to switch to slideshow mode');
-            } finally {
-                startHealthChecks(); // Resume health checks
             }
         }
 
