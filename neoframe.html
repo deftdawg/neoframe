@@ -196,6 +196,8 @@
             }
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/qrcode-generator/qrcode.js"></script>
 </head>
 <body>
     <div class="page-container">
@@ -263,6 +265,47 @@
                 <label for="contrast">Contrast:</label>
                 <input type="range" id="contrast" min="0.5" max="2" step="0.1" value="1.2">
             </div>
+            <div class="controls-group">
+                <label for="qr-code-toggle">
+                    <input type="checkbox" id="qr-code-toggle" style="margin-right: 8px;">Enable QR Code Overlay
+                </label>
+            </div>
+            <div id="qr-code-options" style="display: none;">
+                 <div class="controls-group">
+                    <label for="qr-content-type">QR Code Content:</label>
+                    <select id="qr-content-type">
+                        <option value="url" selected>Browser's Current Address</option>
+                        <option value="exif">Picture EXIF Metadata</option>
+                        <option value="wifi">Device WiFi Connection</option>
+                        <option value="custom">Custom Text</option>
+                    </select>
+                </div>
+                <div class="controls-group" id="qr-custom-text-container" style="display: none;">
+                    <label for="qr-custom-text">Custom Text:</label>
+                    <textarea id="qr-custom-text" rows="3" style="width: 100%; background-color: #1f4068; color: #e5e5e5; border-radius: 5px;"></textarea>
+                </div>
+                <div class="controls-group">
+                    <label for="qr-position">Position:</label>
+                    <select id="qr-position">
+                        <option value="bottom-right" selected>Bottom Right</option>
+                        <option value="bottom-left">Bottom Left</option>
+                        <option value="top-right">Top Right</option>
+                        <option value="top-left">Top Left</option>
+                    </select>
+                </div>
+                <div class="controls-group">
+                    <label for="qr-margin">Margin (px):</label>
+                    <input type="number" id="qr-margin" value="20" min="0" style="width: 100%; padding: 8px; border-radius: 5px; border: none; background-color: #1f4068; color: #e5e5e5;">
+                </div>
+                <div class="controls-group">
+                    <label for="qr-color">QR Code Color:</label>
+                    <select id="qr-color"></select>
+                </div>
+                <div class="controls-group">
+                    <label for="qr-border-color">Border Color:</label>
+                    <select id="qr-border-color"></select>
+                </div>
+            </div>
              <div class="button-group">
                 <button id="download" style="display:none;">Download Dithered Image</button>
                 <button id="sendToESP32" style="display: inline;">Send to Frame</button>
@@ -287,6 +330,17 @@
             { name: "White", r: 255, g: 255, b: 255, value: 0xff }
         ];
 
+        // Populate QR color pickers
+        const qrColorSelect = document.getElementById('qr-color');
+        const qrBorderColorSelect = document.getElementById('qr-border-color');
+        rgbPalette.forEach(color => {
+            const option = new Option(color.name, `rgb(${color.r}, ${color.g}, ${color.b})`);
+            qrColorSelect.add(option.cloneNode(true));
+            qrBorderColorSelect.add(option);
+        });
+        qrColorSelect.value = 'rgb(0, 0, 0)'; // Default to black
+        qrBorderColorSelect.value = 'rgb(255, 255, 255)'; // Default to white
+
         // 事件监听 / Event Listeners
         document.getElementById('upload').addEventListener('change', handleFileUpload);
         document.getElementById('download').addEventListener('click', downloadImage);
@@ -299,6 +353,31 @@
         document.getElementById('ditherMode').addEventListener('change', updateImage);
         document.getElementById('ditherType').addEventListener('change', updateImage);
         document.getElementById('rotation').addEventListener('change', updateImage);
+
+        // QR Code Event Listeners
+        const qrCodeToggle = document.getElementById('qr-code-toggle');
+        const qrCodeOptions = document.getElementById('qr-code-options');
+        const qrContentType = document.getElementById('qr-content-type');
+        const qrCustomTextContainer = document.getElementById('qr-custom-text-container');
+
+        qrCodeToggle.addEventListener('change', () => {
+            qrCodeOptions.style.display = qrCodeToggle.checked ? 'block' : 'none';
+            updateImage();
+        });
+
+        qrContentType.addEventListener('change', () => {
+            qrCustomTextContainer.style.display = qrContentType.value === 'custom' ? 'block' : 'none';
+            if(qrContentType.value === 'custom'){
+                document.getElementById('qr-custom-text').value = window.location.href;
+            }
+            updateImage();
+        });
+
+        document.getElementById('qr-custom-text').addEventListener('input', updateImage);
+        document.getElementById('qr-position').addEventListener('change', updateImage);
+        document.getElementById('qr-margin').addEventListener('input', updateImage);
+        document.getElementById('qr-color').addEventListener('change', updateImage);
+        document.getElementById('qr-border-color').addEventListener('change', updateImage);
         document.getElementById('scaling').addEventListener('change', () => {
             const scalingMode = document.getElementById('scaling').value;
             const customScalingContainer = document.getElementById('custom-scaling-container');
@@ -498,6 +577,116 @@
             canvas.height = frameHeight;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(offscreenCanvas, 0, 0);
+
+            // 4. Draw QR Code if enabled
+            drawQrCode(ctx);
+        }
+
+        function drawQrCode(ctx) {
+            if (!document.getElementById('qr-code-toggle').checked) return;
+
+            const contentType = document.getElementById('qr-content-type').value;
+            let qrContent = '';
+
+            switch (contentType) {
+                case 'url':
+                    qrContent = window.location.href;
+                    break;
+                case 'wifi':
+                    qrContent = `WIFI:T:WPA;S:NeoFrame;P:123456789;H:false;`;
+                    break;
+                case 'custom':
+                    qrContent = document.getElementById('qr-custom-text').value;
+                    break;
+                case 'exif':
+                    EXIF.getData(originalImage, function() {
+                        const allMetaData = EXIF.getAllTags(this);
+                        let exifString = '';
+                        for (let tag in allMetaData) {
+                            if (allMetaData.hasOwnProperty(tag)) {
+                                exifString += `${tag}: ${allMetaData[tag]}\n`;
+                            }
+                        }
+                        qrContent = exifString || "No EXIF data found.";
+                        // Because this is async, we need to re-draw the QR code part
+                        generateAndDrawQrCode(ctx, qrContent);
+                    });
+                    return; // Exit because the actual drawing will happen in the callback
+            }
+
+            generateAndDrawQrCode(ctx, qrContent);
+        }
+
+        function generateAndDrawQrCode(ctx, content) {
+            const qrColor = document.getElementById('qr-color').value;
+            const borderColor = document.getElementById('qr-border-color').value;
+            const position = document.getElementById('qr-position').value;
+            const margin = parseInt(document.getElementById('qr-margin').value, 10);
+            const canvas = ctx.canvas;
+
+            try {
+                const qr = qrcode(0, 'L');
+                qr.addData(content);
+                qr.make();
+
+                const moduleCount = qr.getModuleCount();
+                const moduleSize = 4;
+                const qrSize = moduleCount * moduleSize;
+                const borderSize = moduleSize;
+
+                const qrCanvas = document.createElement('canvas');
+                const qrCtx = qrCanvas.getContext('2d');
+                qrCanvas.width = qrSize;
+                qrCanvas.height = qrSize;
+
+                for (let row = 0; row < moduleCount; row++) {
+                    for (let col = 0; col < moduleCount; col++) {
+                        if (qr.isDark(row, col)) {
+                            qrCtx.fillStyle = qrColor;
+                            qrCtx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
+                        }
+                    }
+                }
+
+                const borderedCanvas = document.createElement('canvas');
+                const borderedCtx = borderedCanvas.getContext('2d');
+                const borderedSize = qrSize + (borderSize * 2);
+                borderedCanvas.width = borderedSize;
+                borderedCanvas.height = borderedSize;
+
+                borderedCtx.fillStyle = borderColor;
+                borderedCtx.fillRect(0, 0, borderedSize, borderedSize);
+                borderedCtx.drawImage(qrCanvas, borderSize, borderSize);
+
+                let x = 0, y = 0;
+                switch (position) {
+                    case 'bottom-right':
+                        x = canvas.width - borderedSize - margin;
+                        y = canvas.height - borderedSize - margin;
+                        break;
+                    case 'bottom-left':
+                        x = margin;
+                        y = canvas.height - borderedSize - margin;
+                        break;
+                    case 'top-right':
+                        x = canvas.width - borderedSize - margin;
+                        y = margin;
+                        break;
+                    case 'top-left':
+                        x = margin;
+                        y = margin;
+                        break;
+                }
+
+                ctx.drawImage(borderedCanvas, x, y);
+
+            } catch (e) {
+                console.error("Error generating QR code:", e);
+                // Optionally, display an error to the user on the canvas
+                ctx.fillStyle = 'red';
+                ctx.font = '20px Arial';
+                ctx.fillText('Error generating QR code', 10, 50);
+            }
         }
 
         function adjustContrast(imageData, factor) {
