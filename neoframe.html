@@ -287,14 +287,13 @@
             <div class="controls-group">
                 <label for="scaling">Scaling: <span id="scale-percentage"></span></label>
                 <select id="scaling">
-                    <option value="fill" selected="selected">13.3: Fill</option>
-                    <option value="fit">13.3: Fit</option>
-                    <option value="fill_8x10">Ikea RÖDALM (31x41cm): Fill</option>
-                    <option value="fit_8x10">Ikea RÖDALM (31x41cm): Fit</option>
-                    <option value="original_8x10">Ikea RÖDALM (31x41cm): 100% (Original Size)</option>
-                    <option value="custom_8x10">Ikea RÖDALM (31x41cm): Custom Percentage</option>
-                    <option value="original">100% (Original Size)</option>
-                    <option value="custom">Custom Percentage</option>
+                    <option value="fill" selected="selected">13.3" ePD: Fill</option>
+                    <option value="fit">13.3" ePD: Fit</option>
+                    <option value="original">13.3" ePD: 100% (Original Size)</option>
+                    <option value="custom">13.3" ePD: Custom Percentage</option>
+                    <option value="fill_8x10">8"x10": Ikea RÖDALM (31x41cm): Fill</option>
+                    <option value="fit_8x10">8"x10": Ikea RÖDALM (31x41cm): Fit</option>
+                    <option value="custom_8x10">8"x10": Ikea RÖDALM (31x41cm): Custom Percentage</option>
                 </select>
             </div>
             <div class="slider-container" id="custom-scaling-container" style="display: none;">
@@ -360,6 +359,12 @@
                 <button id="downloadArray" style="display:none;">Download Data Array</button>
                 <button id="switchToRealTime" style="display: inline;">Switch To Real-time Mode</button>
                 <button id="switchToSlideShow" style="display: inline;">Switch To Slideshow Mode</button>
+            </div>
+            <div id="upload-status-container" style="display: none; margin-top: 15px; text-align: center;">
+                <span id="upload-status-message" style="font-size: 0.9em; color: #aaa;"></span>
+                <div id="upload-progress-bar" style="width: 100%; background-color: #1f4068; border-radius: 5px; overflow: hidden; height: 10px; margin-top: 5px;">
+                    <div id="upload-progress-bar-inner" style="width: 0%; height: 100%; background-color: #00adb5;"></div>
+                </div>
             </div>
             <div id="log"></div>
         </div>
@@ -523,14 +528,33 @@
 
         const qrUpdateDebounced = () => {
             clearTimeout(qrDebounceTimer);
-            qrDebounceTimer = setTimeout(updateImage, 500);
+            qrDebounceTimer = setTimeout(updateImage, 2000); // 2-second delay
         };
 
         document.getElementById('qr-custom-text').addEventListener('input', qrUpdateDebounced);
         document.getElementById('qr-position').addEventListener('change', updateImage);
         document.getElementById('qr-margin').addEventListener('input', qrUpdateDebounced);
-        document.getElementById('qr-color').addEventListener('change', updateImage);
-        document.getElementById('qr-border-color').addEventListener('change', updateImage);
+        // QR Color Swapping Logic
+        let lastQrColor = qrColorSelect.value;
+        let lastQrBorderColor = qrBorderColorSelect.value;
+
+        qrColorSelect.addEventListener('change', () => {
+            if (qrColorSelect.value === qrBorderColorSelect.value) {
+                qrBorderColorSelect.value = lastQrColor;
+            }
+            lastQrColor = qrColorSelect.value;
+            lastQrBorderColor = qrBorderColorSelect.value;
+            updateImage();
+        });
+
+        qrBorderColorSelect.addEventListener('change', () => {
+            if (qrBorderColorSelect.value === qrColorSelect.value) {
+                qrColorSelect.value = lastQrBorderColor;
+            }
+            lastQrColor = qrColorSelect.value;
+            lastQrBorderColor = qrBorderColorSelect.value;
+            updateImage();
+        });
 
         function syncCustomScalingVisibility() {
             const scalingMode = document.getElementById('scaling').value;
@@ -539,6 +563,36 @@
         }
 
         document.getElementById('scaling').addEventListener('change', () => {
+            const scalingMode = document.getElementById('scaling').value;
+
+            if (scalingMode === 'custom_8x10' && originalImage) {
+                const rotation = parseInt(document.getElementById('rotation').value, 10);
+                const rotatedCanvas = document.createElement('canvas');
+                const rotatedCtx = rotatedCanvas.getContext('2d');
+
+                if (rotation === 90 || rotation === 270) {
+                    rotatedCanvas.width = originalImage.height;
+                    rotatedCanvas.height = originalImage.width;
+                } else {
+                    rotatedCanvas.width = originalImage.width;
+                    rotatedCanvas.height = originalImage.height;
+                }
+
+                rotatedCtx.translate(rotatedCanvas.width / 2, rotatedCanvas.height / 2);
+                rotatedCtx.rotate(rotation * Math.PI / 180);
+                rotatedCtx.drawImage(originalImage, -originalImage.width / 2, -originalImage.height / 2);
+                const sourceImage = rotatedCanvas;
+
+                const rodalmTargetWidth = 1130;
+                const rodalmTargetHeight = 1420;
+                const scale = Math.min(rodalmTargetWidth / sourceImage.width, rodalmTargetHeight / sourceImage.height);
+                const scalePercentage = Math.round(scale * 100);
+
+                customScaleSlider.value = scalePercentage;
+                customScaleNumber.value = scalePercentage;
+                document.getElementById('scale-percentage').textContent = `(${scalePercentage}%)`;
+            }
+
             syncCustomScalingVisibility();
             updateImage();
         });
@@ -1539,11 +1593,20 @@ if (mode === 'sixColor') {
             const CHUNK_SIZE = 960000;
             const DELAY_TIME = 5000;
 
+            const uploadStatusContainer = document.getElementById('upload-status-container');
+            const uploadStatusMessage = document.getElementById('upload-status-message');
+            const progressBarInner = document.getElementById('upload-progress-bar-inner');
+
             if (!esp32IP) {
                 alert('Please enter the IP address of the ESP32 first');
                 startHealthChecks(); // Resume health checks if IP is missing
                 return;
             }
+
+            uploadStatusContainer.style.display = 'block';
+            uploadStatusMessage.textContent = 'Uploading to frame...';
+            progressBarInner.style.transition = 'none';
+            progressBarInner.style.width = '0%';
 
             try {
                 const totalChunks = Math.ceil(processedData.length / CHUNK_SIZE);
@@ -1569,7 +1632,17 @@ if (mode === 'sixColor') {
 
                     // "文件上传成功" means "File uploaded successfully"
                     if (responseText.includes("文件上传成功")) {
-                        alert('Image data has been successfully uploaded to ESP32.');
+                        uploadStatusMessage.textContent = 'Refreshing...';
+
+                        // Force a reflow to ensure the transition is applied correctly after the initial width setting.
+                        progressBarInner.offsetHeight;
+
+                        progressBarInner.style.transition = 'width 35s linear';
+                        progressBarInner.style.width = '100%';
+
+                        setTimeout(() => {
+                            uploadStatusContainer.style.display = 'none';
+                        }, 35000);
                         break;
                     }
 
@@ -1578,6 +1651,7 @@ if (mode === 'sixColor') {
             } catch (error) {
                 console.error('Failed to send data:', error);
                 alert('Unable to send data to ESP32 via Wi-Fi');
+                uploadStatusContainer.style.display = 'none';
             } finally {
                 startHealthChecks(); // Always resume health checks
             }
