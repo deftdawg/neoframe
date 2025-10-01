@@ -291,6 +291,8 @@
                     <option value="fit">13.3: Fit</option>
                     <option value="fill_8x10">Ikea RÖDALM (31x41cm): Fill</option>
                     <option value="fit_8x10">Ikea RÖDALM (31x41cm): Fit</option>
+                    <option value="original_8x10">Ikea RÖDALM (31x41cm): 100% (Original Size)</option>
+                    <option value="custom_8x10">Ikea RÖDALM (31x41cm): Custom Percentage</option>
                     <option value="original">100% (Original Size)</option>
                     <option value="custom">Custom Percentage</option>
                 </select>
@@ -533,7 +535,7 @@
         function syncCustomScalingVisibility() {
             const scalingMode = document.getElementById('scaling').value;
             const customScalingContainer = document.getElementById('custom-scaling-container');
-            customScalingContainer.style.display = scalingMode === 'custom' ? 'flex' : 'none';
+            customScalingContainer.style.display = scalingMode.includes('custom') ? 'flex' : 'none';
         }
 
         document.getElementById('scaling').addEventListener('change', () => {
@@ -668,8 +670,15 @@
             let offsetX = 0;
             let offsetY = 0;
 
+            // Values to tune for the Ikea RÖDALM frame's matted area.
+            // To adjust, modify these pixel values.
+            const rodalmTargetWidth = 1130; // Line 667
+            const rodalmTargetHeight = 1420; // Line 668
+
             if (scalingMode.includes('8x10')) {
-                targetHeight = 1506; // 1200 * (236/188)
+                targetWidth = rodalmTargetWidth;
+                targetHeight = rodalmTargetHeight;
+                offsetX = (frameWidth - targetWidth) / 2;
                 offsetY = (frameHeight - targetHeight) / 2;
             }
 
@@ -684,20 +693,22 @@
                     offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'original':
+                case 'original_8x10':
                     scale = 1.0;
                     imageBoundingBox.width = sourceImage.width * scale;
                     imageBoundingBox.height = sourceImage.height * scale;
-                    imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2;
-                    imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2;
+                    imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2 + offsetX;
+                    imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2 + offsetY;
                     offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'custom':
+                case 'custom_8x10':
                     const customScaleValue = parseInt(document.getElementById('customScale').value, 10);
                     scale = customScaleValue / 100;
                     imageBoundingBox.width = sourceImage.width * scale;
                     imageBoundingBox.height = sourceImage.height * scale;
-                    imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2;
-                    imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2;
+                    imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2 + offsetX;
+                    imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2 + offsetY;
                     offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'fill':
