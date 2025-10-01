@@ -289,8 +289,8 @@
                 <select id="scaling">
                     <option value="fill" selected="selected">13.3: Fill</option>
                     <option value="fit">13.3: Fit</option>
-                    <option value="fill_8x10">8x10: Fill</option>
-                    <option value="fit_8x10">8x10: Fit</option>
+                    <option value="fill_8x10">Ikea RÖDALM (31x41cm): Fill</option>
+                    <option value="fit_8x10">Ikea RÖDALM (31x41cm): Fit</option>
                     <option value="original">100% (Original Size)</option>
                     <option value="custom">Custom Percentage</option>
                 </select>
@@ -669,7 +669,7 @@
             let offsetY = 0;
 
             if (scalingMode.includes('8x10')) {
-                targetHeight = 1500; // 1200 * (10/8)
+                targetHeight = 1506; // 1200 * (236/188)
                 offsetY = (frameHeight - targetHeight) / 2;
             }
 
