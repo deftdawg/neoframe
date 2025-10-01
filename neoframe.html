@@ -649,7 +649,6 @@
 
             const frameWidth = 1200;
             const frameHeight = 1600;
-            const size8x10Scaler = 0.985;
 
             // Offscreen canvas for pre-processing
             const offscreenCanvas = document.createElement('canvas');
@@ -664,25 +663,32 @@
             // 1. Draw original image to offscreen canvas with selected scaling
             let scale;
             const imageBoundingBox = { x: 0, y: 0, width: 0, height: 0 };
+            let targetWidth = frameWidth;
+            let targetHeight = frameHeight;
+            let offsetX = 0;
+            let offsetY = 0;
 
-            let baseScale;
+            if (scalingMode.includes('8x10')) {
+                targetHeight = 1500; // 1200 * (10/8)
+                offsetY = (frameHeight - targetHeight) / 2;
+            }
+
             switch (scalingMode) {
                 case 'fit':
                 case 'fit_8x10':
-                    baseScale = Math.min(frameWidth / sourceImage.width, frameHeight / sourceImage.height);
-                    scale = scalingMode === 'fit_8x10' ? baseScale * size8x10Scaler : baseScale;
+                    scale = Math.min(targetWidth / sourceImage.width, targetHeight / sourceImage.height);
                     imageBoundingBox.width = sourceImage.width * scale;
                     imageBoundingBox.height = sourceImage.height * scale;
-                    imageBoundingBox.x = (frameWidth - imageBoundingBox.width) / 2;
-                    imageBoundingBox.y = (frameHeight - imageBoundingBox.height) / 2;
+                    imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2 + offsetX;
+                    imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2 + offsetY;
                     offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'original':
                     scale = 1.0;
                     imageBoundingBox.width = sourceImage.width * scale;
                     imageBoundingBox.height = sourceImage.height * scale;
-                    imageBoundingBox.x = (frameWidth - imageBoundingBox.width) / 2;
-                    imageBoundingBox.y = (frameHeight - imageBoundingBox.height) / 2;
+                    imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2;
+                    imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2;
                     offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'custom':
@@ -690,31 +696,29 @@
                     scale = customScaleValue / 100;
                     imageBoundingBox.width = sourceImage.width * scale;
                     imageBoundingBox.height = sourceImage.height * scale;
-                    imageBoundingBox.x = (frameWidth - imageBoundingBox.width) / 2;
-                    imageBoundingBox.y = (frameHeight - imageBoundingBox.height) / 2;
+                    imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2;
+                    imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2;
                     offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'fill':
                 case 'fill_8x10':
                 default:
-                    baseScale = Math.max(frameWidth / sourceImage.width, frameHeight / sourceImage.height);
-                    scale = scalingMode === 'fill_8x10' ? baseScale * size8x10Scaler : baseScale;
-                    const cropWidth = frameWidth / scale;
-                    const cropHeight = frameHeight / scale;
+                    scale = Math.max(targetWidth / sourceImage.width, targetHeight / sourceImage.height);
+                    const cropWidth = targetWidth / scale;
+                    const cropHeight = targetHeight / scale;
                     const cropX = (sourceImage.width - cropWidth) / 2;
                     const cropY = (sourceImage.height - cropHeight) / 2;
                     offscreenCtx.drawImage(
                         sourceImage,
                         cropX, cropY,
                         cropWidth, cropHeight,
-                        0, 0,
-                        frameWidth, frameHeight
+                        offsetX, offsetY,
+                        targetWidth, targetHeight
                     );
-                    // For fill modes, the image bounding box is the full canvas
-                    imageBoundingBox.x = 0;
-                    imageBoundingBox.y = 0;
-                    imageBoundingBox.width = frameWidth;
-                    imageBoundingBox.height = frameHeight;
+                    imageBoundingBox.x = offsetX;
+                    imageBoundingBox.y = offsetY;
+                    imageBoundingBox.width = targetWidth;
+                    imageBoundingBox.height = targetHeight;
                     break;
             }
 
@@ -741,7 +745,7 @@
             ctx.drawImage(offscreenCanvas, 0, 0);
 
             // 4. Draw QR Code if enabled
-            drawQrCode(ctx, imageBoundingBox, scale);
+            drawQrCode(ctx, imageBoundingBox);
         }
 
         function getRotatedQrPosition(position, rotation) {
@@ -757,7 +761,7 @@
             return positions[newIndex];
         }
 
-        function drawQrCode(ctx, imageRect, scale) {
+        function drawQrCode(ctx, imageRect) {
             if (!document.getElementById('qr-code-toggle').checked) return;
 
             const contentType = document.getElementById('qr-content-type').value;
@@ -783,22 +787,21 @@
                             }
                         }
                         qrContent = exifString || "No EXIF data found.";
-                        generateAndDrawQrCode(ctx, qrContent, imageRect, scale);
+                        generateAndDrawQrCode(ctx, qrContent, imageRect);
                     });
                     return;
             }
 
-            generateAndDrawQrCode(ctx, qrContent, imageRect, scale);
+            generateAndDrawQrCode(ctx, qrContent, imageRect);
         }
 
-        function generateAndDrawQrCode(ctx, content, imageRect, scale) {
+        function generateAndDrawQrCode(ctx, content, imageRect) {
             const qrColor = document.getElementById('qr-color').value;
             const borderColor = document.getElementById('qr-border-color').value;
             const originalPosition = document.getElementById('qr-position').value;
             const rotation = parseInt(document.getElementById('rotation').value, 10);
             const position = getRotatedQrPosition(originalPosition, rotation);
             const margin = parseInt(document.getElementById('qr-margin').value, 10);
-            const scaledMargin = margin / scale;
 
             try {
                 const qr = qrcode(0, 'L');
@@ -842,20 +845,20 @@
                 let x = 0, y = 0;
                 switch (position) {
                     case 'bottom-right':
-                        x = visibleX2 - borderedSize - scaledMargin;
-                        y = visibleY2 - borderedSize - scaledMargin;
+                        x = visibleX2 - borderedSize - margin;
+                        y = visibleY2 - borderedSize - margin;
                         break;
                     case 'bottom-left':
-                        x = visibleX1 + scaledMargin;
-                        y = visibleY2 - borderedSize - scaledMargin;
+                        x = visibleX1 + margin;
+                        y = visibleY2 - borderedSize - margin;
                         break;
                     case 'top-right':
-                        x = visibleX2 - borderedSize - scaledMargin;
-                        y = visibleY1 + scaledMargin;
+                        x = visibleX2 - borderedSize - margin;
+                        y = visibleY1 + margin;
                         break;
                     case 'top-left':
-                        x = visibleX1 + scaledMargin;
-                        y = visibleY1 + scaledMargin;
+                        x = visibleX1 + margin;
+                        y = visibleY1 + margin;
                         break;
                 }
 
