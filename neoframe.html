@@ -287,12 +287,13 @@
             <div class="controls-group">
                 <label for="scaling">Scaling: <span id="scale-percentage"></span></label>
                 <select id="scaling">
-                    <option value="fill" selected="selected">13.3: Fill</option>
-                    <option value="fit">13.3: Fit</option>
-                    <option value="fill_8x10">8x10: Fill</option>
-                    <option value="fit_8x10">8x10: Fit</option>
-                    <option value="original">100% (Original Size)</option>
-                    <option value="custom">Custom Percentage</option>
+                    <option value="fill" selected="selected">13.3" ePD: Fill</option>
+                    <option value="fit">13.3" ePD: Fit</option>
+                    <option value="original">13.3" ePD: 100% (Original Size)</option>
+                    <option value="custom">13.3" ePD: Custom Percentage</option>
+                    <option value="fill_8x10">8"x10": Ikea RÖDALM (31x41cm): Fill</option>
+                    <option value="fit_8x10">8"x10": Ikea RÖDALM (31x41cm): Fit</option>
+                    <option value="custom_8x10">8"x10": Ikea RÖDALM (31x41cm): Custom Percentage</option>
                 </select>
             </div>
             <div class="slider-container" id="custom-scaling-container" style="display: none;">
@@ -358,6 +359,12 @@
                 <button id="downloadArray" style="display:none;">Download Data Array</button>
                 <button id="switchToRealTime" style="display: inline;">Switch To Real-time Mode</button>
                 <button id="switchToSlideShow" style="display: inline;">Switch To Slideshow Mode</button>
+            </div>
+            <div id="upload-status-container" style="display: none; margin-top: 15px; text-align: center;">
+                <span id="upload-status-message" style="font-size: 0.9em; color: #aaa;"></span>
+                <div id="upload-progress-bar" style="width: 100%; background-color: #1f4068; border-radius: 5px; overflow: hidden; height: 10px; margin-top: 5px;">
+                    <div id="upload-progress-bar-inner" style="width: 0%; height: 100%; background-color: #00adb5;"></div>
+                </div>
             </div>
             <div id="log"></div>
         </div>
@@ -492,13 +499,27 @@
         const qrCustomTextContainer = document.getElementById('qr-custom-text-container');
         let qrDebounceTimer;
 
-        qrCodeToggle.addEventListener('change', () => {
+        function syncQrCodeOptionsVisibility() {
             qrCodeOptions.style.display = qrCodeToggle.checked ? 'block' : 'none';
+        }
+
+        qrCodeToggle.addEventListener('change', () => {
+            syncQrCodeOptionsVisibility();
             updateImage();
         });
 
-        qrContentType.addEventListener('change', () => {
+        function syncQrCodeCustomTextVisibility() {
             qrCustomTextContainer.style.display = qrContentType.value === 'custom' ? 'block' : 'none';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            syncQrCodeOptionsVisibility();
+            syncQrCodeCustomTextVisibility();
+            syncCustomScalingVisibility();
+        });
+
+        qrContentType.addEventListener('change', () => {
+            syncQrCodeCustomTextVisibility();
             if (qrContentType.value === 'custom') {
                 document.getElementById('qr-custom-text').value = window.location.href;
             }
@@ -507,19 +528,72 @@
 
         const qrUpdateDebounced = () => {
             clearTimeout(qrDebounceTimer);
-            qrDebounceTimer = setTimeout(updateImage, 500);
+            qrDebounceTimer = setTimeout(updateImage, 2000); // 2-second delay
         };
 
         document.getElementById('qr-custom-text').addEventListener('input', qrUpdateDebounced);
         document.getElementById('qr-position').addEventListener('change', updateImage);
         document.getElementById('qr-margin').addEventListener('input', qrUpdateDebounced);
-        document.getElementById('qr-color').addEventListener('change', updateImage);
-        document.getElementById('qr-border-color').addEventListener('change', updateImage);
+        // QR Color Swapping Logic
+        let lastQrColor = qrColorSelect.value;
+        let lastQrBorderColor = qrBorderColorSelect.value;
+
+        qrColorSelect.addEventListener('change', () => {
+            if (qrColorSelect.value === qrBorderColorSelect.value) {
+                qrBorderColorSelect.value = lastQrColor;
+            }
+            lastQrColor = qrColorSelect.value;
+            lastQrBorderColor = qrBorderColorSelect.value;
+            updateImage();
+        });
+
+        qrBorderColorSelect.addEventListener('change', () => {
+            if (qrBorderColorSelect.value === qrColorSelect.value) {
+                qrColorSelect.value = lastQrBorderColor;
+            }
+            lastQrColor = qrColorSelect.value;
+            lastQrBorderColor = qrBorderColorSelect.value;
+            updateImage();
+        });
+
+        function syncCustomScalingVisibility() {
+            const scalingMode = document.getElementById('scaling').value;
+            const customScalingContainer = document.getElementById('custom-scaling-container');
+            customScalingContainer.style.display = scalingMode.includes('custom') ? 'flex' : 'none';
+        }
 
         document.getElementById('scaling').addEventListener('change', () => {
             const scalingMode = document.getElementById('scaling').value;
-            const customScalingContainer = document.getElementById('custom-scaling-container');
-            customScalingContainer.style.display = scalingMode === 'custom' ? 'flex' : 'none';
+
+            if (scalingMode === 'custom_8x10' && originalImage) {
+                const rotation = parseInt(document.getElementById('rotation').value, 10);
+                const rotatedCanvas = document.createElement('canvas');
+                const rotatedCtx = rotatedCanvas.getContext('2d');
+
+                if (rotation === 90 || rotation === 270) {
+                    rotatedCanvas.width = originalImage.height;
+                    rotatedCanvas.height = originalImage.width;
+                } else {
+                    rotatedCanvas.width = originalImage.width;
+                    rotatedCanvas.height = originalImage.height;
+                }
+
+                rotatedCtx.translate(rotatedCanvas.width / 2, rotatedCanvas.height / 2);
+                rotatedCtx.rotate(rotation * Math.PI / 180);
+                rotatedCtx.drawImage(originalImage, -originalImage.width / 2, -originalImage.height / 2);
+                const sourceImage = rotatedCanvas;
+
+                const rodalmTargetWidth = 1130;
+                const rodalmTargetHeight = 1420;
+                const scale = Math.min(rodalmTargetWidth / sourceImage.width, rodalmTargetHeight / sourceImage.height);
+                const scalePercentage = Math.round(scale * 100);
+
+                customScaleSlider.value = scalePercentage;
+                customScaleNumber.value = scalePercentage;
+                document.getElementById('scale-percentage').textContent = `(${scalePercentage}%)`;
+            }
+
+            syncCustomScalingVisibility();
             updateImage();
         });
 
@@ -631,7 +705,6 @@
 
             const frameWidth = 1200;
             const frameHeight = 1600;
-            const size8x10Scaler = 0.985;
 
             // Offscreen canvas for pre-processing
             const offscreenCanvas = document.createElement('canvas');
@@ -644,58 +717,73 @@
             offscreenCtx.fillRect(0, 0, frameWidth, frameHeight);
 
             // 1. Draw original image to offscreen canvas with selected scaling
-            let scale, scaledWidth, scaledHeight, drawX, drawY;
+            let scale;
+            const imageBoundingBox = { x: 0, y: 0, width: 0, height: 0 };
+            let targetWidth = frameWidth;
+            let targetHeight = frameHeight;
+            let offsetX = 0;
+            let offsetY = 0;
 
-            let baseScale;
+            // Values to tune for the Ikea RÖDALM frame's matted area.
+            // To adjust, modify these pixel values.
+            const rodalmTargetWidth = 1130; // Line 667
+            const rodalmTargetHeight = 1420; // Line 668
+
+            if (scalingMode.includes('8x10')) {
+                targetWidth = rodalmTargetWidth;
+                targetHeight = rodalmTargetHeight;
+                offsetX = (frameWidth - targetWidth) / 2;
+                offsetY = (frameHeight - targetHeight) / 2;
+            }
+
             switch (scalingMode) {
                 case 'fit':
                 case 'fit_8x10':
-                    baseScale = Math.min(frameWidth / sourceImage.width, frameHeight / sourceImage.height);
-                    scale = scalingMode === 'fit_8x10' ? baseScale * size8x10Scaler : baseScale;
-                    scaledWidth = sourceImage.width * scale;
-                    scaledHeight = sourceImage.height * scale;
-                    drawX = (frameWidth - scaledWidth) / 2;
-                    drawY = (frameHeight - scaledHeight) / 2;
-                    offscreenCtx.drawImage(sourceImage, drawX, drawY, scaledWidth, scaledHeight);
+                    scale = Math.min(targetWidth / sourceImage.width, targetHeight / sourceImage.height);
+                    imageBoundingBox.width = sourceImage.width * scale;
+                    imageBoundingBox.height = sourceImage.height * scale;
+                    imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2 + offsetX;
+                    imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2 + offsetY;
+                    offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'original':
+                case 'original_8x10':
                     scale = 1.0;
-                    scaledWidth = sourceImage.width;
-                    scaledHeight = sourceImage.height;
-                    drawX = (frameWidth - scaledWidth) / 2;
-                    drawY = (frameHeight - scaledHeight) / 2;
-                    offscreenCtx.drawImage(sourceImage, drawX, drawY, scaledWidth, scaledHeight);
+                    imageBoundingBox.width = sourceImage.width * scale;
+                    imageBoundingBox.height = sourceImage.height * scale;
+                    imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2 + offsetX;
+                    imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2 + offsetY;
+                    offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'custom':
+                case 'custom_8x10':
                     const customScaleValue = parseInt(document.getElementById('customScale').value, 10);
                     scale = customScaleValue / 100;
-                    scaledWidth = sourceImage.width * scale;
-                    scaledHeight = sourceImage.height * scale;
-                    drawX = (frameWidth - scaledWidth) / 2;
-                    drawY = (frameHeight - scaledHeight) / 2;
-                    offscreenCtx.drawImage(sourceImage, drawX, drawY, scaledWidth, scaledHeight);
+                    imageBoundingBox.width = sourceImage.width * scale;
+                    imageBoundingBox.height = sourceImage.height * scale;
+                    imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2 + offsetX;
+                    imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2 + offsetY;
+                    offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
                     break;
                 case 'fill':
                 case 'fill_8x10':
                 default:
-                    baseScale = Math.max(frameWidth / sourceImage.width, frameHeight / sourceImage.height);
-                    scale = scalingMode === 'fill_8x10' ? baseScale * size8x10Scaler : baseScale;
-                    const cropWidth = frameWidth / scale;
-                    const cropHeight = frameHeight / scale;
+                    scale = Math.max(targetWidth / sourceImage.width, targetHeight / sourceImage.height);
+                    const cropWidth = targetWidth / scale;
+                    const cropHeight = targetHeight / scale;
                     const cropX = (sourceImage.width - cropWidth) / 2;
                     const cropY = (sourceImage.height - cropHeight) / 2;
                     offscreenCtx.drawImage(
                         sourceImage,
                         cropX, cropY,
                         cropWidth, cropHeight,
-                        0, 0,
-                        frameWidth, frameHeight
+                        offsetX, offsetY,
+                        targetWidth, targetHeight
                     );
-                    // For fill modes, the image bounding box is the full canvas
-                    drawX = 0;
-                    drawY = 0;
-                    scaledWidth = frameWidth;
-                    scaledHeight = frameHeight;
+                    imageBoundingBox.x = offsetX;
+                    imageBoundingBox.y = offsetY;
+                    imageBoundingBox.width = targetWidth;
+                    imageBoundingBox.height = targetHeight;
                     break;
             }
 
@@ -722,7 +810,7 @@
             ctx.drawImage(offscreenCanvas, 0, 0);
 
             // 4. Draw QR Code if enabled
-            drawQrCode(ctx, { x: drawX, y: drawY, width: scaledWidth, height: scaledHeight });
+            drawQrCode(ctx, imageBoundingBox);
         }
 
         function getRotatedQrPosition(position, rotation) {
@@ -814,23 +902,28 @@
                 borderedCtx.fillRect(0, 0, borderedSize, borderedSize);
                 borderedCtx.drawImage(qrCanvas, borderSize, borderSize);
 
+                const visibleX1 = Math.max(0, imageRect.x);
+                const visibleY1 = Math.max(0, imageRect.y);
+                const visibleX2 = Math.min(imageRect.x + imageRect.width, ctx.canvas.width);
+                const visibleY2 = Math.min(imageRect.y + imageRect.height, ctx.canvas.height);
+
                 let x = 0, y = 0;
                 switch (position) {
                     case 'bottom-right':
-                        x = imageRect.x + imageRect.width - borderedSize - margin;
-                        y = imageRect.y + imageRect.height - borderedSize - margin;
+                        x = visibleX2 - borderedSize - margin;
+                        y = visibleY2 - borderedSize - margin;
                         break;
                     case 'bottom-left':
-                        x = imageRect.x + margin;
-                        y = imageRect.y + imageRect.height - borderedSize - margin;
+                        x = visibleX1 + margin;
+                        y = visibleY2 - borderedSize - margin;
                         break;
                     case 'top-right':
-                        x = imageRect.x + imageRect.width - borderedSize - margin;
-                        y = imageRect.y + margin;
+                        x = visibleX2 - borderedSize - margin;
+                        y = visibleY1 + margin;
                         break;
                     case 'top-left':
-                        x = imageRect.x + margin;
-                        y = imageRect.y + margin;
+                        x = visibleX1 + margin;
+                        y = visibleY1 + margin;
                         break;
                 }
 
@@ -1500,11 +1593,20 @@ if (mode === 'sixColor') {
             const CHUNK_SIZE = 960000;
             const DELAY_TIME = 5000;
 
+            const uploadStatusContainer = document.getElementById('upload-status-container');
+            const uploadStatusMessage = document.getElementById('upload-status-message');
+            const progressBarInner = document.getElementById('upload-progress-bar-inner');
+
             if (!esp32IP) {
                 alert('Please enter the IP address of the ESP32 first');
                 startHealthChecks(); // Resume health checks if IP is missing
                 return;
             }
+
+            uploadStatusContainer.style.display = 'block';
+            uploadStatusMessage.textContent = 'Uploading to frame...';
+            progressBarInner.style.transition = 'none';
+            progressBarInner.style.width = '0%';
 
             try {
                 const totalChunks = Math.ceil(processedData.length / CHUNK_SIZE);
@@ -1529,8 +1631,18 @@ if (mode === 'sixColor') {
                     console.log(`Server response: ${responseText}`);
 
                     // "文件上传成功" means "File uploaded successfully"
-                    if (responseText.includes("文件上传成功")) {
-                        alert('Image data has been successfully uploaded to ESP32.');
+                    if (responseText.includes("上传成功")) {
+                        uploadStatusMessage.textContent = 'Refreshing...';
+
+                        // Force a reflow to ensure the transition is applied correctly after the initial width setting.
+                        progressBarInner.offsetHeight;
+
+                        progressBarInner.style.transition = 'width 35s linear';
+                        progressBarInner.style.width = '100%';
+
+                        setTimeout(() => {
+                            uploadStatusContainer.style.display = 'none';
+                        }, 35000);
                         break;
                     }
 
@@ -1539,6 +1651,7 @@ if (mode === 'sixColor') {
             } catch (error) {
                 console.error('Failed to send data:', error);
                 alert('Unable to send data to ESP32 via Wi-Fi');
+                uploadStatusContainer.style.display = 'none';
             } finally {
                 startHealthChecks(); // Always resume health checks
             }
