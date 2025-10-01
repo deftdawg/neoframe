@@ -1631,7 +1631,7 @@ if (mode === 'sixColor') {
                     console.log(`Server response: ${responseText}`);
 
                     // "文件上传成功" means "File uploaded successfully"
-                    if (responseText.includes("文件上传成功")) {
+                    if (responseText.includes("上传成功")) {
                         uploadStatusMessage.textContent = 'Refreshing...';
 
                         // Force a reflow to ensure the transition is applied correctly after the initial width setting.
