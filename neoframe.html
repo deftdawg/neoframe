@@ -233,6 +233,26 @@
                 font-size: 0.9em;
             }
         }
+
+        /* Responsive layout for wider screens */
+        @media (min-width: 1300px) {
+            .page-container {
+                flex-direction: row;
+                align-items: flex-start;
+                gap: 20px;
+            }
+            .controls-container {
+                width: 600px;
+                flex-shrink: 0;
+                position: sticky;
+                top: 20px;
+            }
+            #canvas {
+                flex-grow: 1;
+                max-width: calc(100% - 620px);
+                height: auto;
+            }
+        }
     </style>
     <script src="scripts/exif.js"></script>
     <script type="text/javascript" src="scripts/qrcode.js"></script>
