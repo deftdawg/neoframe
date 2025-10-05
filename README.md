@@ -1,5 +1,5 @@
 # DeftDawg's Unofficial fork of [Good Display's NeoFrame HTML page](http://www.einkapp.com/esp32-133c02.html) 
-for 13.3" Spectra 6 displays driven by w/ [ESP32-133C02](https://www.good-display.com/product/574.html)
+for 13.3" Spectra 6 displays driven by w/ [ESP32-133C02](https://www.good-display.com/product/574.html) (Wifi firmware)
 
 Adds:
 - rotation
