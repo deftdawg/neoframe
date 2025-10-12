@@ -373,6 +373,25 @@
                     <select id="qr-border-color"></select>
                 </div>
             </div>
+            <div class="controls-group">
+                <details>
+                    <summary>Save/Load/Clear Settings</summary>
+                    <div id="settings-controls" style="margin-top: 10px;">
+                        <label for="settings-json">Settings JSON:</label>
+                        <textarea id="settings-json" rows="5" style="width: 100%; background-color: #1f4068; color: #e5e5e5; border-radius: 5px;"></textarea>
+                        <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <input type="checkbox" id="autosave-settings" style="margin-right: 8px;">
+                                <label for="autosave-settings">Autosave</label>
+                            </div>
+                            <div>
+                                <button id="save-settings-button">Save</button>
+                                <button id="clear-settings-button">Clear</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </div>
              <div class="button-group">
                 <button id="download" style="display:none;">Download Dithered Image</button>
                 <button id="sendToESP32" style="display: inline;">Send to Frame</button>
@@ -414,18 +433,170 @@
         qrColorSelect.value = 'rgb(0, 0, 0)'; // Default to black
         qrBorderColorSelect.value = 'rgb(255, 255, 255)'; // Default to white
 
+        // --- Settings Management ---
+        const settingsKey = 'neoframeSettings';
+
+        function getSettings() {
+            return {
+                esp32Ip: document.getElementById('esp32-ip').value,
+                ditherMode: document.getElementById('ditherMode').value,
+                ditherType: document.getElementById('ditherType').value,
+                rotation: document.getElementById('rotation').value,
+                scaling: document.getElementById('scaling').value,
+                customScale: document.getElementById('customScale').value,
+                ditherStrength: document.getElementById('ditherStrength').value,
+                contrast: document.getElementById('contrast').value,
+                qrCodeEnabled: document.getElementById('qr-code-toggle').checked,
+                qrContentType: document.getElementById('qr-content-type').value,
+                qrCustomText: document.getElementById('qr-custom-text').value,
+                qrPosition: document.getElementById('qr-position').value,
+                qrMargin: document.getElementById('qr-margin').value,
+                qrColor: document.getElementById('qr-color').value,
+                qrBorderColor: document.getElementById('qr-border-color').value,
+                autosave: document.getElementById('autosave-settings').checked
+            };
+        }
+
+        function applySettings(settings) {
+            const errors = [];
+            const apply = (id, property, value, isCheckbox = false) => {
+                const element = document.getElementById(id);
+                if (element) {
+                    if (isCheckbox) {
+                        element.checked = value;
+                    } else {
+                        element.value = value;
+                    }
+                    // Trigger change events to update UI state like visibility
+                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                } else {
+                    errors.push(`Setting '${property}' could not be applied: Element with ID '${id}' not found.`);
+                }
+            };
+
+            try {
+                apply('esp32-ip', 'esp32Ip', settings.esp32Ip);
+                apply('ditherMode', 'ditherMode', settings.ditherMode);
+                apply('ditherType', 'ditherType', settings.ditherType);
+                apply('rotation', 'rotation', settings.rotation);
+                apply('scaling', 'scaling', settings.scaling);
+                apply('customScale', 'customScale', settings.customScale);
+                apply('customScaleNumber', 'customScale', settings.customScale);
+                apply('ditherStrength', 'ditherStrength', settings.ditherStrength);
+                apply('contrast', 'contrast', settings.contrast);
+                apply('qr-code-toggle', 'qrCodeEnabled', settings.qrCodeEnabled, true);
+                apply('qr-content-type', 'qrContentType', settings.qrContentType);
+                apply('qr-custom-text', 'qrCustomText', settings.qrCustomText);
+                apply('qr-position', 'qrPosition', settings.qrPosition);
+                apply('qr-margin', 'qrMargin', settings.qrMargin);
+                apply('qr-color', 'qrColor', settings.qrColor);
+                apply('qr-border-color', 'qrBorderColor', settings.qrBorderColor);
+                apply('autosave-settings', 'autosave', settings.autosave, true);
+
+            } catch (e) {
+                errors.push(`A critical error occurred while applying settings: ${e.message}`);
+            }
+
+            if (errors.length > 0) {
+                alert("Errors encountered while loading settings:\n\n" + errors.join("\n"));
+            }
+
+            updateSettingsTextarea();
+        }
+
+        function saveSettingsToLocalStorage() {
+            const settings = getSettings();
+            localStorage.setItem(settingsKey, JSON.stringify(settings));
+        }
+
+        function updateSettingsTextarea() {
+            const settings = getSettings();
+            document.getElementById('settings-json').value = JSON.stringify(settings, null, 2);
+        }
+
         // 事件监听 / Event Listeners
-        document.getElementById('upload').addEventListener('change', handleFileUpload);
-        document.getElementById('download').addEventListener('click', downloadImage);
+        function setupEventListeners() {
+            const controlsToMonitor = [
+                'esp32-ip', 'ditherMode', 'ditherType', 'rotation', 'scaling', 'customScale',
+                'ditherStrength', 'contrast', 'qr-code-toggle', 'qr-content-type',
+                'qr-custom-text', 'qr-position', 'qr-margin', 'qr-color', 'qr-border-color',
+                'autosave-settings'
+            ];
+
+            controlsToMonitor.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    const eventType = (element.type === 'range' || element.type === 'text' || element.tagName === 'TEXTAREA') ? 'input' : 'change';
+                    element.addEventListener(eventType, () => {
+                        updateSettingsTextarea();
+                        if (document.getElementById('autosave-settings').checked) {
+                            saveSettingsToLocalStorage();
+                        }
+                        // For controls that affect the image, we still call updateImage
+                        if (!['esp32-ip', 'autosave-settings'].includes(id)) {
+                             // Debounce for text/range inputs
+                            if (['input'].includes(eventType)) {
+                                clearTimeout(window.updateImageDebounce);
+                                window.updateImageDebounce = setTimeout(() => updateImage(), 300);
+                            } else {
+                                updateImage();
+                            }
+                        }
+                    });
+                }
+            });
+
+            document.getElementById('save-settings-button').addEventListener('click', () => {
+                try {
+                    const settingsText = document.getElementById('settings-json').value;
+                    const settings = JSON.parse(settingsText);
+                    localStorage.setItem(settingsKey, JSON.stringify(settings));
+                    alert('Settings saved successfully! The page will now reload to apply them.');
+                    location.reload();
+                } catch (e) {
+                    alert('Error parsing settings JSON. Please ensure it is valid.\n\n' + e.message);
+                }
+            });
+
+            document.getElementById('clear-settings-button').addEventListener('click', () => {
+                if (confirm('Are you sure you want to clear all saved settings and reload the page?')) {
+                    localStorage.removeItem(settingsKey);
+                    alert('Settings cleared. The page will now reload to defaults.');
+                    location.reload();
+                }
+            });
+
+            document.getElementById('upload').addEventListener('change', handleFileUpload);
+            document.getElementById('download').addEventListener('click', downloadImage);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedSettings = localStorage.getItem(settingsKey);
+            if (savedSettings) {
+                try {
+                    const settings = JSON.parse(savedSettings);
+                    applySettings(settings);
+                } catch (e) {
+                    alert('Error parsing saved settings. Defaults will be loaded.\n\n' + e.message);
+                    localStorage.removeItem(settingsKey); // Clear corrupted settings
+                }
+            } else {
+                // If no settings are saved, populate the textarea with defaults
+                updateSettingsTextarea();
+            }
+
+            // Initialize UI states based on initial values (could be from defaults or loaded settings)
+            syncQrCodeOptionsVisibility();
+            syncQrCodeCustomTextVisibility();
+            syncCustomScalingVisibility();
+            startHealthChecks();
+            setupEventListeners(); // Setup listeners after initial settings are applied
+        });
+
         document.getElementById('sendToESP32').addEventListener('click', sendToESP32);
         document.getElementById('downloadArray').addEventListener('click', downloadDataArray);
         document.getElementById('switchToRealTime').addEventListener('click', switchToRealTime);
         document.getElementById('switchToSlideShow').addEventListener('click', switchToSlideShow);
-        document.getElementById('ditherStrength').addEventListener('input', updateImage);
-        document.getElementById('contrast').addEventListener('input', updateImage);
-        document.getElementById('ditherMode').addEventListener('change', updateImage);
-        document.getElementById('ditherType').addEventListener('change', updateImage);
-        document.getElementById('rotation').addEventListener('change', updateImage);
 
         // Health Check Logic
         const esp32IpInput = document.getElementById('esp32-ip');
@@ -505,9 +676,6 @@
             checkEsp32Status();
         }
 
-        // Start checking when the page loads
-        document.addEventListener('DOMContentLoaded', startHealthChecks);
-
         // And restart checks if the IP is changed
         esp32IpInput.addEventListener('change', startHealthChecks);
 
@@ -531,12 +699,6 @@
         function syncQrCodeCustomTextVisibility() {
             qrCustomTextContainer.style.display = qrContentType.value === 'custom' ? 'block' : 'none';
         }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            syncQrCodeOptionsVisibility();
-            syncQrCodeCustomTextVisibility();
-            syncCustomScalingVisibility();
-        });
 
         qrContentType.addEventListener('change', () => {
             syncQrCodeCustomTextVisibility();
