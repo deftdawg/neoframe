@@ -4,9 +4,9 @@
     "pkg-config@0.29.2",
     "cairo@1.16.0",
     "pango@1.50.12",
-    "libjpeg@9e",
+    "libjpeg@latest",
     "giflib@5.2.1",
-    "librsvg@2.54.5"
+    "librsvg@latest"
   ],
   "shell": {
     "init_hook": [
