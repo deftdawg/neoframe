@@ -1,0 +1,13 @@
+{
+  "packages": [
+    "bun@1.0.0"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo 'Checking for bun dependencies...'",
+      "bun install",
+      "echo '\nTo build the CLI, run: bun build.ts'",
+      "echo 'To run the CLI, use: bun cli.ts <path_to_image_or_url> <json_config_string_or_path_to_json>'"
+    ]
+  }
+}
