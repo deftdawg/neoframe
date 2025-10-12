@@ -40,20 +40,10 @@ async function main() {
 
         console.log('Processing image...');
 
-        const imageData = ctx.getImageData(0, 0, frameWidth, frameHeight);
-
-        // The core image processing logic is now in the image-processor module
-        // We just need to prepare the canvas and call the functions.
-
-        const offscreenCanvas = createCanvas(frameWidth, frameHeight);
-        const offscreenCtx = offscreenCanvas.getContext('2d');
-        offscreenCtx.fillStyle = 'white';
-        offscreenCtx.fillRect(0, 0, frameWidth, frameHeight);
-
-        const rotation = parseInt(settings.rotation, 10);
         const rotatedCanvas = createCanvas(image.width, image.height);
         const rotatedCtx = rotatedCanvas.getContext('2d');
 
+        const rotation = parseInt(settings.rotation, 10);
         if (rotation === 90 || rotation === 270) {
             rotatedCanvas.width = image.height;
             rotatedCanvas.height = image.width;
@@ -63,15 +53,21 @@ async function main() {
         rotatedCtx.rotate(rotation * Math.PI / 180);
         rotatedCtx.drawImage(image, -image.width / 2, -image.height / 2);
 
-        offscreenCtx.drawImage(rotatedCanvas, 0, 0);
+        const sourceImage = rotatedCanvas;
 
-        const processedCtx = offscreenCanvas.getContext('2d');
-        const processedImageData = processedCtx.getImageData(0, 0, frameWidth, frameHeight);
+        const offscreenCanvas = createCanvas(frameWidth, frameHeight);
+        const offscreenCtx = offscreenCanvas.getContext('2d');
 
-        adjustContrast(processedImageData, parseFloat(settings.contrast));
-        ditherImage(processedImageData, settings);
+        offscreenCtx.fillStyle = 'white';
+        offscreenCtx.fillRect(0, 0, frameWidth, frameHeight);
 
-        processedCtx.putImageData(processedImageData, 0, 0);
+        offscreenCtx.drawImage(sourceImage, 0, 0, frameWidth, frameHeight);
+
+        const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);
+        adjustContrast(imageData, parseFloat(settings.contrast));
+        ditherImage(imageData, settings);
+        offscreenCtx.putImageData(imageData, 0, 0);
+
         ctx.drawImage(offscreenCanvas, 0, 0);
 
         if (settings.qrCodeEnabled) {
@@ -89,7 +85,7 @@ async function main() {
                     break;
                 case 'exif':
                     const imageBuffer = readFileSync(imagePathOrUrl);
-                    const exifData = getExifData(imageBuffer);
+                    const exifData = await getExifData(imageBuffer);
                     let exifString = '';
                     if (exifData && exifData.tags) {
                         for (let tag in exifData.tags) {
@@ -101,10 +97,9 @@ async function main() {
                     qrContent = exifString || "No EXIF data found.";
                     break;
             }
-            const qr = generateQrCode(qrContent, {});
-            if (qr) {
-                drawQrCodeOnCanvas(ctx, qr, settings);
-            }
+            const qrCanvas = createCanvas(200, 200);
+            await generateQrCode(qrContent, qrCanvas);
+            drawQrCodeOnCanvas(ctx, qrCanvas, settings);
         }
 
         console.log('Image processing complete.');

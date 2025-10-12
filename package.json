@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "canvas": "^3.2.0",
-    "exif-parser": "^0.1.12"
+    "exif": "^0.6.0",
+    "exif-parser": "^0.1.12",
+    "qrcode": "^1.5.4"
   }
 }

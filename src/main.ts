@@ -13,7 +13,6 @@ declare global {
         switchToRealTime: () => void;
         switchToSlideShow: () => void;
         originalImage: any;
-        EXIF: any;
     }
 }
 
@@ -70,11 +69,10 @@ function applySettings(settings: Config) {
     updateImage();
 }
 
-function updateImage() {
-    try {
-        if (!originalImage) return;
+async function updateImage() {
+    if (!originalImage) return;
 
-        const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
     const ctx = canvas.getContext('2d')!;
     const settings = getSettings();
     const rotation = parseInt(settings.rotation, 10);
@@ -198,30 +196,31 @@ function updateImage() {
                 qrContent = settings.qrCustomText;
                 break;
             case 'exif':
-                window.EXIF.getData(originalImage as any, function(this: any) {
-                    const allMetaData = window.EXIF.getAllTags(this);
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const exifData = await getExifData(Buffer.from(e.target!.result as ArrayBuffer));
                     let exifString = '';
-                    for (let tag in allMetaData) {
-                        if (allMetaData.hasOwnProperty(tag)) {
-                            exifString += `${tag}: ${allMetaData[tag]}\n`;
+                    if (exifData && exifData.tags) {
+                        for (let tag in exifData.tags) {
+                            if (exifData.tags.hasOwnProperty(tag)) {
+                                exifString += `${tag}: ${exifData.tags[tag]}\n`;
+                            }
                         }
                     }
                     qrContent = exifString || "No EXIF data found.";
-                    const qr = generateQrCode(qrContent, {});
-                    if (qr) {
-                        drawQrCodeOnCanvas(ctx, qr, settings);
-                    }
-                });
+                    const qrCanvas = document.createElement('canvas');
+                    await generateQrCode(qrContent, qrCanvas);
+                    drawQrCodeOnCanvas(ctx, qrCanvas, settings);
+                };
+                const response = await fetch(originalImage.src);
+                const blob = await response.blob();
+                reader.readAsArrayBuffer(blob);
                 return;
         }
 
-        const qr = generateQrCode(qrContent, {});
-        if (qr) {
-            drawQrCodeOnCanvas(ctx, qr, settings);
-        }
-    }
-    } catch (e) {
-        console.error("Error in updateImage:", e);
+        const qrCanvas = document.createElement('canvas');
+        await generateQrCode(qrContent, qrCanvas);
+        drawQrCodeOnCanvas(ctx, qrCanvas, settings);
     }
 }
 

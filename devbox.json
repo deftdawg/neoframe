@@ -4,16 +4,20 @@
     "pkg-config@0.29.2",
     "cairo@1.16.0",
     "pango@1.50.12",
-    "libjpeg@latest",
+    "libjpeg@9e",
     "giflib@5.2.1",
-    "librsvg@latest"
+    "librsvg@2.54.5"
   ],
   "shell": {
     "init_hook": [
       "echo 'Checking for bun dependencies...'",
       "bun install",
-      "echo '\nTo build the CLI, run: bun build.ts'",
-      "echo 'To run the CLI, use: bun cli.ts <path_to_image_or_url> <json_config_string_or_path_to_json>'"
+      "echo '\n--- Build Instructions ---'",
+      "echo 'To build the browser version: bun build-browser.ts'",
+      "echo 'To build the CLI version: bun build-cli.ts'",
+      "echo '\n--- Run Instructions ---'",
+      "echo 'To run the CLI: ./dist/cli <path_to_image_or_url> <json_config_string_or_path_to_json>'",
+      "echo 'To use the browser version, open neoframe.html in your browser.'"
     ]
   }
 }

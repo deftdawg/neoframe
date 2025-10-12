@@ -1,64 +1,21 @@
-import { readFileSync } from 'fs';
+import { toCanvas } from 'qrcode';
 import { Canvas, CanvasRenderingContext2D } from 'canvas';
 
-// A simple DOM shim
-const createQrCode = () => {
-    // This is a hack to get the qrcode.js library to work in a non-browser environment
-    const script = readFileSync('scripts/qrcode.js', 'utf-8');
-    const self = {
-        // Mock self for the UMD wrapper
-    };
-    const window = {
-        // Mock window for the UMD wrapper
-    };
-    const module: { exports?: any } = {};
-    const define = (deps: any, factory: any) => {
-        module.exports = factory();
-    };
-    (define as any).amd = true;
-    const fn = new Function('self', 'window', 'module', 'define', script);
-    fn(self, window, module, define);
-    return module.exports;
-};
-
-const qrcode = createQrCode();
-
-export function generateQrCode(content: string, options: any): any {
+export async function generateQrCode(content: string, canvas: Canvas) {
     try {
-        const qr = qrcode(0, 'L');
-        qr.addData(content);
-        qr.make();
-        return qr;
+        await toCanvas(canvas, content);
     } catch (e) {
         console.error("Error generating QR code:", e);
-        return null;
     }
 }
 
-export function drawQrCodeOnCanvas(ctx: CanvasRenderingContext2D, qr: any, config: any) {
-    const qrColor = config.qrColor;
+export function drawQrCodeOnCanvas(ctx: CanvasRenderingContext2D, qrCanvas: Canvas, config: any) {
     const borderColor = config.qrBorderColor;
     const position = config.qrPosition;
     const margin = parseInt(config.qrMargin, 10);
+    const borderSize = 4; // module size
 
-    const moduleCount = qr.getModuleCount();
-    const moduleSize = 4;
-    const qrSize = moduleCount * moduleSize;
-    const borderSize = moduleSize;
-
-    const qrCanvas = new Canvas(qrSize, qrSize);
-    const qrCtx = qrCanvas.getContext('2d');
-
-    for (let row = 0; row < moduleCount; row++) {
-        for (let col = 0; col < moduleCount; col++) {
-            if (qr.isDark(row, col)) {
-                qrCtx.fillStyle = qrColor;
-                qrCtx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
-            }
-        }
-    }
-
-    const borderedCanvas = new Canvas(qrSize + borderSize * 2, qrSize + borderSize * 2);
+    const borderedCanvas = new Canvas(qrCanvas.width + borderSize * 2, qrCanvas.height + borderSize * 2);
     const borderedCtx = borderedCanvas.getContext('2d');
     borderedCtx.fillStyle = borderColor;
     borderedCtx.fillRect(0, 0, borderedCanvas.width, borderedCanvas.height);
