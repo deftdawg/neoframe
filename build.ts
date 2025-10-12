@@ -4,3 +4,5 @@ await Bun.build({
     target: 'browser',
     minify: true,
 });
+
+console.log('Build complete.');
