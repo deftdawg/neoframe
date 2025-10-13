@@ -369,9 +369,28 @@
                     <select id="qr-color"></select>
                 </div>
                 <div class="controls-group">
-                    <label for="qr-border-color">Border Color:</label>
+                    <label for="qr-border-color">QR Background Color:</label>
                     <select id="qr-border-color"></select>
                 </div>
+            </div>
+            <div class="controls-group">
+                <details>
+                    <summary>Save/Load/Clear Settings</summary>
+                    <div id="settings-controls" style="margin-top: 10px;">
+                        <label for="settings-json">Settings JSON:</label>
+                        <textarea id="settings-json" rows="5" style="width: 100%; background-color: #1f4068; color: #e5e5e5; border-radius: 5px;"></textarea>
+                        <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <input type="checkbox" id="autosave-settings" style="margin-right: 8px;">
+                                <label for="autosave-settings">Autosave</label>
+                            </div>
+                            <div>
+                                <button id="save-settings-button">Save</button>
+                                <button id="clear-settings-button">Clear</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
             </div>
              <div class="button-group">
                 <button id="download" style="display:none;">Download Dithered Image</button>
@@ -414,18 +433,232 @@
         qrColorSelect.value = 'rgb(0, 0, 0)'; // Default to black
         qrBorderColorSelect.value = 'rgb(255, 255, 255)'; // Default to white
 
+        // --- Settings Management ---
+        const settingsKey = 'neoframeSettings';
+
+        function getSettings() {
+            return {
+                esp32Ip: document.getElementById('esp32-ip').value,
+                ditherMode: document.getElementById('ditherMode').value,
+                ditherType: document.getElementById('ditherType').value,
+                rotation: document.getElementById('rotation').value,
+                scaling: document.getElementById('scaling').value,
+                customScale: document.getElementById('customScale').value,
+                ditherStrength: document.getElementById('ditherStrength').value,
+                contrast: document.getElementById('contrast').value,
+                qrCodeEnabled: document.getElementById('qr-code-toggle').checked,
+                qrContentType: document.getElementById('qr-content-type').value,
+                qrCustomText: document.getElementById('qr-custom-text').value,
+                qrPosition: document.getElementById('qr-position').value,
+                qrMargin: document.getElementById('qr-margin').value,
+                qrColor: document.getElementById('qr-color').value,
+                qrBorderColor: document.getElementById('qr-border-color').value,
+                autosave: document.getElementById('autosave-settings').checked
+            };
+        }
+
+        function applySettings(settings) {
+            const errors = [];
+            const apply = (id, property, value, isCheckbox = false) => {
+                const element = document.getElementById(id);
+                if (element) {
+                    if (isCheckbox) {
+                        element.checked = value;
+                    } else {
+                        element.value = value;
+                    }
+                    // Trigger change events to update UI state like visibility
+                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                } else {
+                    errors.push(`Setting '${property}' could not be applied: Element with ID '${id}' not found.`);
+                }
+            };
+
+            try {
+                apply('esp32-ip', 'esp32Ip', settings.esp32Ip);
+                apply('ditherMode', 'ditherMode', settings.ditherMode);
+                apply('ditherType', 'ditherType', settings.ditherType);
+                apply('rotation', 'rotation', settings.rotation);
+                apply('scaling', 'scaling', settings.scaling);
+                apply('customScale', 'customScale', settings.customScale);
+                apply('customScaleNumber', 'customScale', settings.customScale);
+                apply('ditherStrength', 'ditherStrength', settings.ditherStrength);
+                apply('contrast', 'contrast', settings.contrast);
+                apply('qr-code-toggle', 'qrCodeEnabled', settings.qrCodeEnabled, true);
+                apply('qr-content-type', 'qrContentType', settings.qrContentType);
+                apply('qr-custom-text', 'qrCustomText', settings.qrCustomText);
+                apply('qr-position', 'qrPosition', settings.qrPosition);
+                apply('qr-margin', 'qrMargin', settings.qrMargin);
+                apply('qr-color', 'qrColor', settings.qrColor);
+                apply('qr-border-color', 'qrBorderColor', settings.qrBorderColor);
+                apply('autosave-settings', 'autosave', settings.autosave, true);
+
+            } catch (e) {
+                errors.push(`A critical error occurred while applying settings: ${e.message}`);
+            }
+
+            if (errors.length > 0) {
+                alert("Errors encountered while loading settings:\n\n" + errors.join("\n"));
+            }
+
+            updateSettingsTextarea();
+        }
+
+        function saveSettingsToLocalStorage() {
+            const settings = getSettings();
+            localStorage.setItem(settingsKey, JSON.stringify(settings));
+        }
+
+        function updateSettingsTextarea() {
+            const settings = getSettings();
+            document.getElementById('settings-json').value = JSON.stringify(settings, null, 2);
+        }
+
         // 事件监听 / Event Listeners
-        document.getElementById('upload').addEventListener('change', handleFileUpload);
-        document.getElementById('download').addEventListener('click', downloadImage);
+        function setupEventListeners() {
+            const controlsToMonitor = [
+        'esp32-ip', 'ditherMode', 'ditherType', 'rotation', 'scaling', 'customScale', 'customScaleNumber',
+                'ditherStrength', 'contrast', 'qr-code-toggle', 'qr-content-type',
+                'qr-custom-text', 'qr-position', 'qr-margin', 'qr-color', 'qr-border-color',
+                'autosave-settings'
+            ];
+
+    // Special handling for QR color swapping
+    let lastQrColor = document.getElementById('qr-color').value;
+    let lastQrBorderColor = document.getElementById('qr-border-color').value;
+
+            controlsToMonitor.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+            const eventType = (element.type === 'range' || element.type === 'text' || element.tagName === 'TEXTAREA' || element.type === 'number') ? 'input' : 'change';
+                    element.addEventListener(eventType, () => {
+                // --- Phase 1: Update settings object and auto-save if needed ---
+                        updateSettingsTextarea();
+                        if (document.getElementById('autosave-settings').checked) {
+                            saveSettingsToLocalStorage();
+                        }
+
+                // --- Phase 2: Handle special UI logic for specific controls ---
+                if (id === 'qr-code-toggle') {
+                    syncQrCodeOptionsVisibility();
+                }
+                if (id === 'qr-content-type') {
+                    syncQrCodeCustomTextVisibility();
+                    if (element.value === 'custom') {
+                        document.getElementById('qr-custom-text').value = window.location.href;
+                    }
+                }
+                if (id === 'scaling') {
+                    syncCustomScalingVisibility();
+                    if (element.value === 'custom_8x10' && originalImage) {
+                        const rotation = parseInt(document.getElementById('rotation').value, 10);
+                        const rotatedCanvas = document.createElement('canvas');
+                        const rotatedCtx = rotatedCanvas.getContext('2d');
+                        if (rotation === 90 || rotation === 270) {
+                            rotatedCanvas.width = originalImage.height;
+                            rotatedCanvas.height = originalImage.width;
+                        } else {
+                            rotatedCanvas.width = originalImage.width;
+                            rotatedCanvas.height = originalImage.height;
+                        }
+                        rotatedCtx.translate(rotatedCanvas.width / 2, rotatedCtx.rotate(rotation * Math.PI / 180));
+                        rotatedCtx.drawImage(originalImage, -originalImage.width / 2, -originalImage.height / 2);
+                        const sourceImage = rotatedCanvas;
+                        const rodalmTargetWidth = 1130;
+                        const rodalmTargetHeight = 1420;
+                        const scale = Math.min(rodalmTargetWidth / sourceImage.width, rodalmTargetHeight / sourceImage.height);
+                        const scalePercentage = Math.round(scale * 100);
+                        document.getElementById('customScale').value = scalePercentage;
+                        document.getElementById('customScaleNumber').value = scalePercentage;
+                    }
+                }
+                 if (id === 'qr-color') {
+                    if (element.value === document.getElementById('qr-border-color').value) {
+                         document.getElementById('qr-border-color').value = lastQrColor;
+                    }
+                    lastQrColor = element.value;
+                    lastQrBorderColor = document.getElementById('qr-border-color').value;
+                }
+                if (id === 'qr-border-color') {
+                     if (element.value === document.getElementById('qr-color').value) {
+                        document.getElementById('qr-color').value = lastQrBorderColor;
+                    }
+                    lastQrColor = document.getElementById('qr-color').value;
+                    lastQrBorderColor = element.value;
+                }
+
+
+                // --- Phase 3: Update the main image if the control affects it ---
+                        if (!['esp32-ip', 'autosave-settings'].includes(id)) {
+                    // Special debounce for margin input
+                    if (id === 'qr-margin') {
+                        clearTimeout(window.marginDebounce);
+                        window.marginDebounce = setTimeout(() => updateImage(), 500);
+                    } else if (['input'].includes(eventType)) {
+                                clearTimeout(window.updateImageDebounce);
+                                window.updateImageDebounce = setTimeout(() => updateImage(), 300);
+                            } else {
+                                updateImage();
+                            }
+                        }
+                    });
+                }
+            });
+
+    // --- Listeners for buttons and file uploads that are not part of the settings state ---
+            document.getElementById('save-settings-button').addEventListener('click', () => {
+                try {
+                    const settingsText = document.getElementById('settings-json').value;
+                    const settings = JSON.parse(settingsText);
+                    localStorage.setItem(settingsKey, JSON.stringify(settings));
+                    alert('Settings saved successfully! The page will now reload to apply them.');
+                    location.reload();
+                } catch (e) {
+                    alert('Error parsing settings JSON. Please ensure it is valid.\n\n' + e.message);
+                }
+            });
+
+            document.getElementById('clear-settings-button').addEventListener('click', () => {
+                if (confirm('Are you sure you want to clear all saved settings and reload the page?')) {
+                    localStorage.removeItem(settingsKey);
+                    alert('Settings cleared. The page will now reload to defaults.');
+                    location.reload();
+                }
+            });
+
+            document.getElementById('upload').addEventListener('change', handleFileUpload);
+            document.getElementById('download').addEventListener('click', downloadImage);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. Set up event listeners so they are ready.
+            setupEventListeners();
+
+            // 2. Load settings from storage.
+            const savedSettings = localStorage.getItem(settingsKey);
+            if (savedSettings) {
+                try {
+                    const settings = JSON.parse(savedSettings);
+                    // 3. Apply settings, which will trigger the listeners.
+                    applySettings(settings);
+                } catch (e) {
+                    console.error("Failed to parse settings, using defaults.", e);
+                    localStorage.removeItem(settingsKey);
+                    updateSettingsTextarea(); // Show default settings in UI
+                }
+            } else {
+                // If no settings, just show defaults.
+                updateSettingsTextarea();
+            }
+
+            // 4. Start other processes.
+            startHealthChecks();
+        });
+
         document.getElementById('sendToESP32').addEventListener('click', sendToESP32);
         document.getElementById('downloadArray').addEventListener('click', downloadDataArray);
         document.getElementById('switchToRealTime').addEventListener('click', switchToRealTime);
         document.getElementById('switchToSlideShow').addEventListener('click', switchToSlideShow);
-        document.getElementById('ditherStrength').addEventListener('input', updateImage);
-        document.getElementById('contrast').addEventListener('input', updateImage);
-        document.getElementById('ditherMode').addEventListener('change', updateImage);
-        document.getElementById('ditherType').addEventListener('change', updateImage);
-        document.getElementById('rotation').addEventListener('change', updateImage);
 
         // Health Check Logic
         const esp32IpInput = document.getElementById('esp32-ip');
@@ -440,33 +673,27 @@
 
         async function checkEsp32Status() {
             const ip = esp32IpInput.value.trim();
+            lastCheckedTimeSpan.textContent = new Date().toLocaleTimeString();
+
             if (!ip) {
                 updateStatus(false, 'IP address is empty.');
+                scheduleNextCheck(); // Still schedule the next check
                 return;
             }
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2000); // 2-second timeout
-
-            lastCheckedTimeSpan.textContent = new Date().toLocaleTimeString();
-            onlineStatusIndicator.classList.remove('online', 'offline'); // Set to neutral gray
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
 
             try {
-                // We expect a 500 error from a healthy frame, which is not a network error.
-                // Any response, even an error response, means the device is on the network.
-                // Using 'no-cors' is crucial here. We can't inspect the response (e.g., check for status 500),
-                // but a successful fetch (promise resolves) indicates the device is reachable on the network.
-                // A network error (promise rejects) indicates it's offline. This avoids CORS issues
-                // where the browser would block the request if the ESP32 doesn't send CORS headers.
+                // No need to set to neutral here; updateStatus will handle it.
                 const response = await fetch(`http://${ip}/`, {
                     method: 'GET',
-                    mode: 'no-cors', // Allows checking reachability without requiring CORS headers from the device
-                    signal: controller.signal
+                    mode: 'no-cors', // This is key for checking reachability without CORS
+                    signal: controller.signal,
+                    cache: 'no-cache' // Prevent browser from caching the result
                 });
-                 // If we get here, it's online, regardless of status code
-                updateStatus(true);
+                updateStatus(true); // If fetch resolves, it's online
             } catch (error) {
-                // This catches network errors (e.g., unreachable host) or timeouts
                 if (error.name === 'AbortError') {
                     updateStatus(false, 'Timeout');
                 } else {
@@ -474,22 +701,21 @@
                 }
             } finally {
                 clearTimeout(timeoutId);
-                scheduleNextCheck();
+                scheduleNextCheck(); // Always schedule the next check
             }
         }
 
         function updateStatus(isOnline, statusText = 'Unknown') {
+            onlineStatusIndicator.classList.remove('online', 'offline'); // Reset state first
             if (isOnline) {
                 onlineStatusIndicator.classList.add('online');
-                onlineStatusIndicator.classList.remove('offline');
                 onlineStatusIndicator.title = 'Status: Online';
                 lastOnlineTimeSpan.textContent = new Date().toLocaleTimeString();
                 currentCheckInterval = baseCheckInterval; // Reset interval on success
             } else {
                 onlineStatusIndicator.classList.add('offline');
-                onlineStatusIndicator.classList.remove('online');
                 onlineStatusIndicator.title = `Status: Offline (${statusText})`;
-                // Double the interval on failure, up to the max
+                // Implement exponential backoff for checking
                 currentCheckInterval = Math.min(currentCheckInterval * 2, maxCheckInterval);
             }
         }
@@ -505,9 +731,6 @@
             checkEsp32Status();
         }
 
-        // Start checking when the page loads
-        document.addEventListener('DOMContentLoaded', startHealthChecks);
-
         // And restart checks if the IP is changed
         esp32IpInput.addEventListener('change', startHealthChecks);
 
@@ -517,64 +740,14 @@
         const qrCodeOptions = document.getElementById('qr-code-options');
         const qrContentType = document.getElementById('qr-content-type');
         const qrCustomTextContainer = document.getElementById('qr-custom-text-container');
-        let qrDebounceTimer;
 
         function syncQrCodeOptionsVisibility() {
             qrCodeOptions.style.display = qrCodeToggle.checked ? 'block' : 'none';
         }
 
-        qrCodeToggle.addEventListener('change', () => {
-            syncQrCodeOptionsVisibility();
-            updateImage();
-        });
-
         function syncQrCodeCustomTextVisibility() {
             qrCustomTextContainer.style.display = qrContentType.value === 'custom' ? 'block' : 'none';
         }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            syncQrCodeOptionsVisibility();
-            syncQrCodeCustomTextVisibility();
-            syncCustomScalingVisibility();
-        });
-
-        qrContentType.addEventListener('change', () => {
-            syncQrCodeCustomTextVisibility();
-            if (qrContentType.value === 'custom') {
-                document.getElementById('qr-custom-text').value = window.location.href;
-            }
-            updateImage();
-        });
-
-        const qrUpdateDebounced = () => {
-            clearTimeout(qrDebounceTimer);
-            qrDebounceTimer = setTimeout(updateImage, 2000); // 2-second delay
-        };
-
-        document.getElementById('qr-custom-text').addEventListener('input', qrUpdateDebounced);
-        document.getElementById('qr-position').addEventListener('change', updateImage);
-        document.getElementById('qr-margin').addEventListener('input', qrUpdateDebounced);
-        // QR Color Swapping Logic
-        let lastQrColor = qrColorSelect.value;
-        let lastQrBorderColor = qrBorderColorSelect.value;
-
-        qrColorSelect.addEventListener('change', () => {
-            if (qrColorSelect.value === qrBorderColorSelect.value) {
-                qrBorderColorSelect.value = lastQrColor;
-            }
-            lastQrColor = qrColorSelect.value;
-            lastQrBorderColor = qrBorderColorSelect.value;
-            updateImage();
-        });
-
-        qrBorderColorSelect.addEventListener('change', () => {
-            if (qrBorderColorSelect.value === qrColorSelect.value) {
-                qrColorSelect.value = lastQrBorderColor;
-            }
-            lastQrColor = qrColorSelect.value;
-            lastQrBorderColor = qrBorderColorSelect.value;
-            updateImage();
-        });
 
         function syncCustomScalingVisibility() {
             const scalingMode = document.getElementById('scaling').value;
@@ -582,89 +755,18 @@
             customScalingContainer.style.display = scalingMode.includes('custom') ? 'flex' : 'none';
         }
 
-        document.getElementById('scaling').addEventListener('change', () => {
-            const scalingMode = document.getElementById('scaling').value;
-
-            if (scalingMode === 'custom_8x10' && originalImage) {
-                const rotation = parseInt(document.getElementById('rotation').value, 10);
-                const rotatedCanvas = document.createElement('canvas');
-                const rotatedCtx = rotatedCanvas.getContext('2d');
-
-                if (rotation === 90 || rotation === 270) {
-                    rotatedCanvas.width = originalImage.height;
-                    rotatedCanvas.height = originalImage.width;
-                } else {
-                    rotatedCanvas.width = originalImage.width;
-                    rotatedCanvas.height = originalImage.height;
-                }
-
-                rotatedCtx.translate(rotatedCanvas.width / 2, rotatedCanvas.height / 2);
-                rotatedCtx.rotate(rotation * Math.PI / 180);
-                rotatedCtx.drawImage(originalImage, -originalImage.width / 2, -originalImage.height / 2);
-                const sourceImage = rotatedCanvas;
-
-                const rodalmTargetWidth = 1130;
-                const rodalmTargetHeight = 1420;
-                const scale = Math.min(rodalmTargetWidth / sourceImage.width, rodalmTargetHeight / sourceImage.height);
-                const scalePercentage = Math.round(scale * 100);
-
-                customScaleSlider.value = scalePercentage;
-                customScaleNumber.value = scalePercentage;
-                document.getElementById('scale-percentage').textContent = `(${scalePercentage}%)`;
-            }
-
-            syncCustomScalingVisibility();
-            updateImage();
-        });
-
-        const customScaleSlider = document.getElementById('customScale');
-        const customScaleNumber = document.getElementById('customScaleNumber');
-
-        let debounceTimer;
-
-        // For the slider: update the number box on 'input', but only update the image on 'change' (on release)
-        customScaleSlider.addEventListener('input', () => {
-            const scaleValue = parseInt(customScaleSlider.value, 10);
-            customScaleNumber.value = scaleValue;
-            document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
-        });
-        customScaleSlider.addEventListener('change', () => {
-            updateImage();
-        });
-
-        // For the number input: use a debounce to avoid updating on every keystroke
-        customScaleNumber.addEventListener('input', () => {
-            const scaleValue = parseInt(customScaleNumber.value, 10);
-
-            // Sync slider and percentage text immediately
-            if (!isNaN(scaleValue) && scaleValue >= 10 && scaleValue <= 200) {
-                customScaleSlider.value = scaleValue;
-                document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
-            } else if (customScaleNumber.value === '') {
-                 document.getElementById('scale-percentage').textContent = ``;
-            }
-
-            // Debounce the actual image update
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                if (!isNaN(scaleValue) && scaleValue >= 10 && scaleValue <= 200) {
-                    updateImage();
-                }
-            }, 500);
-        });
-
         // Quick-set buttons should update everything immediately.
         document.querySelectorAll('.quick-scale').forEach(button => {
             button.addEventListener('click', (e) => {
                 const scaleValue = e.target.dataset.scale;
-                customScaleSlider.value = scaleValue;
-                customScaleNumber.value = scaleValue;
+                document.getElementById('customScale').value = scaleValue;
+                document.getElementById('customScaleNumber').value = scaleValue;
                 document.getElementById('scale-percentage').textContent = `(${scaleValue}%)`;
                 updateImage();
 
                 // Also switch the dropdown to custom if another mode was selected
                 document.getElementById('scaling').value = 'custom';
-                document.getElementById('custom-scaling-container').style.display = 'flex';
+                syncCustomScalingVisibility();
             });
         });
 
