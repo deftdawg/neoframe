@@ -1,6 +1,6 @@
 import { getConfig, Config } from './config';
 import { adjustContrast, ditherImage, processImageData } from './algorithms';
-import { drawQrCodeOnCanvas } from './qr-generator';
+import { generateQrCode, drawQrCodeOnCanvas } from './qr-generator';
 
 declare global {
     interface Window {
@@ -174,16 +174,6 @@ async function updateImage() {
             break;
     }
 
-    const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);
-    adjustContrast(imageData, parseFloat(settings.contrast));
-    ditherImage(imageData, settings as Config);
-    offscreenCtx.putImageData(imageData, 0, 0);
-
-    canvas.width = frameWidth;
-    canvas.height = frameHeight;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(offscreenCanvas, 0, 0);
-
     if (settings.qrCodeEnabled) {
         let qrContent = '';
         switch (settings.qrContentType) {
@@ -206,48 +196,43 @@ async function updateImage() {
                         }
                     }
                     qrContent = exifString || "No EXIF data found.";
-                    const qr = window.qrcode(0, 'L');
-                    qr.addData(qrContent);
-                    qr.make();
-                    const qrCanvas = document.createElement('canvas');
-                    qr.renderTo2dContext(qrCanvas.getContext('2d'), 4);
-                    drawQrCodeOnCanvas(ctx, qrCanvas, settings, imageBoundingBox, (w, h) => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = w;
-                        canvas.height = h;
-                        return canvas;
-                    });
+                    const qrCanvas = await generateQrCode(
+                        (w, h) => {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = w;
+                            canvas.height = h;
+                            return canvas;
+                        },
+                        qrContent,
+                        200
+                    );
+                    drawQrCodeOnCanvas(offscreenCtx, qrCanvas, settings, imageBoundingBox);
                 });
                 return;
         }
 
-        const qr = window.qrcode(0, 'L');
-        qr.addData(qrContent);
-        qr.make();
-        const qrCanvas = document.createElement('canvas');
-        const qrCtx = qrCanvas.getContext('2d')!;
-
-        const moduleCount = qr.getModuleCount();
-        const moduleSize = 4;
-        qrCanvas.width = moduleCount * moduleSize;
-        qrCanvas.height = moduleCount * moduleSize;
-
-        for (let row = 0; row < moduleCount; row++) {
-            for (let col = 0; col < moduleCount; col++) {
-                if (qr.isDark(row, col)) {
-                    qrCtx.fillStyle = settings.qrColor;
-                    qrCtx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
-                }
-            }
-        }
-
-        drawQrCodeOnCanvas(ctx, qrCanvas, settings, imageBoundingBox, (w, h) => {
-            const canvas = document.createElement('canvas');
-            canvas.width = w;
-            canvas.height = h;
-            return canvas;
-        });
+        const qrCanvas = await generateQrCode(
+            (w, h) => {
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                return canvas;
+            },
+            qrContent,
+            200
+        );
+        drawQrCodeOnCanvas(offscreenCtx, qrCanvas, settings, imageBoundingBox);
     }
+
+    const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);
+    adjustContrast(imageData, parseFloat(settings.contrast));
+    ditherImage(imageData, settings as Config);
+    offscreenCtx.putImageData(imageData, 0, 0);
+
+    canvas.width = frameWidth;
+    canvas.height = frameHeight;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(offscreenCanvas, 0, 0);
 }
 
 

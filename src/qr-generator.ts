@@ -3,45 +3,44 @@ import { Canvas, CanvasRenderingContext2D } from 'canvas';
 
 type AnyCanvas = Canvas | HTMLCanvasElement;
 
-export async function generateQrCode(content: string, canvas: AnyCanvas) {
+export async function generateQrCode(
+    createCanvas: (width: number, height: number) => AnyCanvas,
+    content: string,
+    width: number
+): Promise<AnyCanvas> {
+    const canvas = createCanvas(width, width); // QR codes are square
     try {
-        // The 'qrcode' library's 'toCanvas' function works with both Node-canvas and HTMLCanvasElement
-        await toCanvas(canvas as HTMLCanvasElement, content);
+        await toCanvas(canvas as HTMLCanvasElement, content, {
+            width: width,
+            margin: 1 // Use a small margin to ensure a minimal border
+        });
     } catch (e) {
         console.error("Error generating QR code:", e);
     }
+    return canvas;
 }
 
 export function drawQrCodeOnCanvas(
     ctx: CanvasRenderingContext2D,
     qrCanvas: AnyCanvas,
     config: any,
-    imageBoundingBox: { x: number, y: number, width: number, height: number },
-    createCanvas: (width: number, height: number) => AnyCanvas
+    imageBoundingBox: { x: number, y: number, width: number, height: number }
 ) {
-    const borderColor = config.qrBorderColor;
     const position = config.qrPosition;
     const margin = parseInt(config.qrMargin, 10);
-    const borderSize = 4; // A small, hardcoded border size
-
-    const borderedCanvas = createCanvas(qrCanvas.width + borderSize * 2, qrCanvas.height + borderSize * 2);
-    const borderedCtx = borderedCanvas.getContext('2d') as CanvasRenderingContext2D;
-    borderedCtx.fillStyle = borderColor;
-    borderedCtx.fillRect(0, 0, borderedCanvas.width, borderedCanvas.height);
-    borderedCtx.drawImage(qrCanvas as any, borderSize, borderSize);
 
     let x = 0, y = 0;
     switch (position) {
         case 'bottom-right':
-            x = imageBoundingBox.x + imageBoundingBox.width - borderedCanvas.width - margin;
-            y = imageBoundingBox.y + imageBoundingBox.height - borderedCanvas.height - margin;
+            x = imageBoundingBox.x + imageBoundingBox.width - qrCanvas.width - margin;
+            y = imageBoundingBox.y + imageBoundingBox.height - qrCanvas.height - margin;
             break;
         case 'bottom-left':
             x = imageBoundingBox.x + margin;
-            y = imageBoundingBox.y + imageBoundingBox.height - borderedCanvas.height - margin;
+            y = imageBoundingBox.y + imageBoundingBox.height - qrCanvas.height - margin;
             break;
         case 'top-right':
-            x = imageBoundingBox.x + imageBoundingBox.width - borderedCanvas.width - margin;
+            x = imageBoundingBox.x + imageBoundingBox.width - qrCanvas.width - margin;
             y = imageBoundingBox.y + margin;
             break;
         case 'top-left':
@@ -50,5 +49,5 @@ export function drawQrCodeOnCanvas(
             break;
     }
 
-    ctx.drawImage(borderedCanvas as any, x, y);
+    ctx.drawImage(qrCanvas as any, x, y);
 }
