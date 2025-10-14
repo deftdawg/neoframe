@@ -10,6 +10,7 @@ declare global {
         downloadDataArray: () => void;
         switchToRealTime: () => void;
         switchToSlideShow: () => void;
+        checkHealth: () => void;
         originalImage: any;
         qrcode: any;
         EXIF: any;
@@ -67,6 +68,35 @@ function applySettings(settings: Config) {
     (document.getElementById('qr-border-color') as HTMLSelectElement).value = settings.qrBorderColor;
     (document.getElementById('autosave-settings') as HTMLInputElement).checked = settings.autosave;
     updateImage();
+}
+
+async function checkHealth() {
+    const esp32IP = (document.getElementById('esp32-ip') as HTMLInputElement).value;
+    const statusIndicator = document.getElementById('online-status-indicator')!;
+    const lastOnlineTimeElem = document.getElementById('last-online-time')!;
+    const lastCheckedTimeElem = document.getElementById('last-checked-time')!;
+
+    lastCheckedTimeElem.textContent = new Date().toLocaleTimeString();
+    statusIndicator.style.backgroundColor = '#6c757d'; // Default to grey while checking
+
+    try {
+        const response = await fetch(`http://${esp32IP}/health`, {
+            method: 'GET',
+            mode: 'no-cors'
+        });
+
+        // no-cors means we can't check response.ok, so we assume any response is a success
+        statusIndicator.classList.remove('offline');
+        statusIndicator.classList.add('online');
+        statusIndicator.title = 'Status: Online';
+        lastOnlineTimeElem.textContent = new Date().toLocaleTimeString();
+
+    } catch (error) {
+        console.error('Health check failed:', error);
+        statusIndicator.classList.remove('online');
+        statusIndicator.classList.add('offline');
+        statusIndicator.title = 'Status: Offline';
+    }
 }
 
 async function updateImage() {
@@ -427,6 +457,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('downloadArray')!.addEventListener('click', downloadDataArray);
     document.getElementById('switchToRealTime')!.addEventListener('click', switchToRealTime);
     document.getElementById('switchToSlideShow')!.addEventListener('click', switchToSlideShow);
+
+    checkHealth();
+    setInterval(checkHealth, 10000);
 
     const controlsToMonitor = [
         'ditherMode', 'ditherType', 'rotation', 'scaling', 'customScale',
