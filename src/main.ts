@@ -10,6 +10,7 @@ declare global {
         downloadDataArray: () => void;
         switchToRealTime: () => void;
         switchToSlideShow: () => void;
+        checkHealth: () => void;
         originalImage: any;
         qrcode: any;
         EXIF: any;
@@ -67,6 +68,37 @@ function applySettings(settings: Config) {
     (document.getElementById('qr-border-color') as HTMLSelectElement).value = settings.qrBorderColor;
     (document.getElementById('autosave-settings') as HTMLInputElement).checked = settings.autosave;
     updateImage();
+}
+
+async function checkHealth() {
+    const esp32IP = (document.getElementById('esp32-ip') as HTMLInputElement).value;
+    const statusIndicator = document.getElementById('online-status-indicator')!;
+    const lastOnlineTimeElem = document.getElementById('last-online-time')!;
+    const lastCheckedTimeElem = document.getElementById('last-checked-time')!;
+
+    lastCheckedTimeElem.textContent = new Date().toLocaleTimeString();
+    statusIndicator.classList.remove('online', 'offline');
+
+    try {
+        // The ESP32 does not return CORS headers, so we must use no-cors mode.
+        // This means we cannot inspect the response, but a successful fetch (not throwing an error)
+        // indicates the device is reachable.
+        await fetch(`http://${esp32IP}/health`, {
+            method: 'GET',
+            mode: 'no-cors',
+        });
+
+        statusIndicator.classList.add('online');
+        statusIndicator.title = 'Status: Online';
+        lastOnlineTimeElem.textContent = new Date().toLocaleTimeString();
+
+    } catch (error) {
+        // This catch block will handle network errors, which indicate the device is offline.
+        // The browser will still log a CORS error in the console, which is expected.
+        console.error('Health check failed:', error);
+        statusIndicator.classList.add('offline');
+        statusIndicator.title = 'Status: Offline';
+    }
 }
 
 async function updateImage() {
@@ -427,6 +459,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('downloadArray')!.addEventListener('click', downloadDataArray);
     document.getElementById('switchToRealTime')!.addEventListener('click', switchToRealTime);
     document.getElementById('switchToSlideShow')!.addEventListener('click', switchToSlideShow);
+
+    checkHealth();
+    setInterval(checkHealth, 10000);
 
     const controlsToMonitor = [
         'ditherMode', 'ditherType', 'rotation', 'scaling', 'customScale',
