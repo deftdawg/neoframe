@@ -77,23 +77,23 @@ async function checkHealth() {
     const lastCheckedTimeElem = document.getElementById('last-checked-time')!;
 
     lastCheckedTimeElem.textContent = new Date().toLocaleTimeString();
-    statusIndicator.style.backgroundColor = '#6c757d'; // Default to grey while checking
+    statusIndicator.classList.remove('online', 'offline');
 
     try {
         const response = await fetch(`http://${esp32IP}/health`, {
-            method: 'GET',
-            mode: 'no-cors'
+            method: 'GET'
         });
 
-        // no-cors means we can't check response.ok, so we assume any response is a success
-        statusIndicator.classList.remove('offline');
-        statusIndicator.classList.add('online');
-        statusIndicator.title = 'Status: Online';
-        lastOnlineTimeElem.textContent = new Date().toLocaleTimeString();
+        if (response.ok) {
+            statusIndicator.classList.add('online');
+            statusIndicator.title = 'Status: Online';
+            lastOnlineTimeElem.textContent = new Date().toLocaleTimeString();
+        } else {
+            throw new Error(`Health check failed with status: ${response.status}`);
+        }
 
     } catch (error) {
         console.error('Health check failed:', error);
-        statusIndicator.classList.remove('online');
         statusIndicator.classList.add('offline');
         statusIndicator.title = 'Status: Offline';
     }
