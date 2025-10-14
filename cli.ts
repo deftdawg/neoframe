@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { readFileSync, writeFileSync } from 'fs';
 import { loadImage, createCanvas, Image } from 'canvas';
 import { getConfig, Config } from './src/config';
@@ -5,15 +6,42 @@ import { adjustContrast, ditherImage, processImageData } from './src/image-proce
 import { generateQrCode, drawQrCodeOnCanvas } from './src/qr-generator';
 import { getExifData } from './src/exif-reader';
 
+async function waitForDevice(ip: string, timeout: number) {
+    console.log(`Waiting for device at ${ip} to come online...`);
+    const end = Date.now() + timeout * 1000;
+    while (Date.now() < end) {
+        try {
+            const response = await fetch(`http://${ip}/`, { method: 'GET', signal: AbortSignal.timeout(1000) });
+            if (response.status === 500) {
+                console.log('Device is online.');
+                return true;
+            }
+        } catch (error) {
+            // Ignore errors until timeout
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    console.error(`Device at ${ip} did not come online within ${timeout} seconds.`);
+    return false;
+}
+
 async function main() {
     const args = process.argv.slice(2);
-    if (args.length < 2) {
-        console.error('Usage: bun cli.ts <path_to_image_or_url> <json_config_string_or_path_to_json>');
-        process.exit(1);
+    const imagePathOrUrlIndex = args.findIndex(arg => !arg.startsWith('--'));
+    const imagePathOrUrl = args[imagePathOrUrlIndex];
+    const configStrOrPathIndex = args.findIndex(arg => arg.endsWith('.json') || arg.startsWith('{'));
+    const configStrOrPath = args[configStrOrPathIndex];
+
+    const waitForOnlineIndex = args.indexOf('--wait-for-online');
+    let waitForOnlineTimeout = 0;
+    if (waitForOnlineIndex !== -1 && args[waitForOnlineIndex + 1]) {
+        waitForOnlineTimeout = parseInt(args[waitForOnlineIndex + 1], 10);
     }
 
-    const imagePathOrUrl = args[0];
-    const configStrOrPath = args[1];
+    if (!imagePathOrUrl || !configStrOrPath) {
+        console.error('Usage: ./dist/cli.js <path_to_image_or_url> <json_config_string_or_path_to_json> [--wait-for-online <seconds>]');
+        process.exit(1);
+    }
 
     let config: Partial<Config>;
     try {
@@ -105,6 +133,13 @@ async function main() {
         console.log('Image processing complete.');
 
         const finalImageData = processImageData(ctx.getImageData(0, 0, frameWidth, frameHeight), settings);
+
+        if (waitForOnlineTimeout > 0) {
+            const online = await waitForDevice(settings.esp32Ip, waitForOnlineTimeout);
+            if (!online) {
+                process.exit(1);
+            }
+        }
 
         try {
             console.log('Uploading to frame...');

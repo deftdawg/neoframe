@@ -1,7 +1,5 @@
 import { getConfig, Config } from './config';
-import { adjustContrast, ditherImage, processImageData } from './image-processor';
-import { generateQrCode, drawQrCodeOnCanvas } from './qr-generator';
-import { getExifData } from './exif-reader';
+import { adjustContrast, ditherImage, processImageData } from './algorithms';
 
 declare global {
     interface Window {
@@ -13,6 +11,8 @@ declare global {
         switchToRealTime: () => void;
         switchToSlideShow: () => void;
         originalImage: any;
+        qrcode: any;
+        EXIF: any;
     }
 }
 
@@ -196,32 +196,84 @@ async function updateImage() {
                 qrContent = settings.qrCustomText;
                 break;
             case 'exif':
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    const exifData = await getExifData(Buffer.from(e.target!.result as ArrayBuffer));
+                window.EXIF.getData(originalImage as any, function(this: any) {
+                    const allMetaData = window.EXIF.getAllTags(this);
                     let exifString = '';
-                    if (exifData && exifData.tags) {
-                        for (let tag in exifData.tags) {
-                            if (exifData.tags.hasOwnProperty(tag)) {
-                                exifString += `${tag}: ${exifData.tags[tag]}\n`;
-                            }
+                    for (let tag in allMetaData) {
+                        if (allMetaData.hasOwnProperty(tag)) {
+                            exifString += `${tag}: ${allMetaData[tag]}\n`;
                         }
                     }
                     qrContent = exifString || "No EXIF data found.";
+                    const qr = window.qrcode(0, 'L');
+                    qr.addData(qrContent);
+                    qr.make();
                     const qrCanvas = document.createElement('canvas');
-                    await generateQrCode(qrContent, qrCanvas);
+                    qr.renderTo2dContext(qrCanvas.getContext('2d'), 4);
                     drawQrCodeOnCanvas(ctx, qrCanvas, settings);
-                };
-                const response = await fetch(originalImage.src);
-                const blob = await response.blob();
-                reader.readAsArrayBuffer(blob);
+                });
                 return;
         }
 
+        const qr = window.qrcode(0, 'L');
+        qr.addData(qrContent);
+        qr.make();
         const qrCanvas = document.createElement('canvas');
-        await generateQrCode(qrContent, qrCanvas);
+        const qrCtx = qrCanvas.getContext('2d')!;
+
+        const moduleCount = qr.getModuleCount();
+        const moduleSize = 4;
+        qrCanvas.width = moduleCount * moduleSize;
+        qrCanvas.height = moduleCount * moduleSize;
+
+        for (let row = 0; row < moduleCount; row++) {
+            for (let col = 0; col < moduleCount; col++) {
+                if (qr.isDark(row, col)) {
+                    qrCtx.fillStyle = settings.qrColor;
+                    qrCtx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
+                }
+            }
+        }
+
         drawQrCodeOnCanvas(ctx, qrCanvas, settings);
     }
+}
+
+function drawQrCodeOnCanvas(ctx: CanvasRenderingContext2D, qrCanvas: HTMLCanvasElement, config: any) {
+    const borderColor = config.qrBorderColor;
+    const position = config.qrPosition;
+    const margin = parseInt(config.qrMargin, 10);
+    const borderSize = 4; // module size
+
+    const borderedCanvas = document.createElement('canvas');
+    const borderedCtx = borderedCanvas.getContext('2d')!;
+    borderedCanvas.width = qrCanvas.width + borderSize * 2;
+    borderedCanvas.height = qrCanvas.height + borderSize * 2;
+    borderedCtx.fillStyle = borderColor;
+    borderedCtx.fillRect(0, 0, borderedCanvas.width, borderedCanvas.height);
+    borderedCtx.drawImage(qrCanvas, borderSize, borderSize);
+
+    let x = 0, y = 0;
+    switch (position) {
+        case 'bottom-right':
+            x = ctx.canvas.width - borderedCanvas.width - margin;
+            y = ctx.canvas.height - borderedCanvas.height - margin;
+            break;
+        case 'bottom-left':
+            x = margin;
+            y = ctx.canvas.height - borderedCanvas.height - margin;
+            break;
+        case 'top-right':
+            x = ctx.canvas.width - borderedCanvas.width - margin;
+            y = margin;
+            break;
+        case 'top-left':
+            x = margin;
+            y = margin;
+            break;
+    }
+
+    ctx.drawImage(borderedCanvas, x, y);
 }
 
 function handleFileUpload(event: Event) {
@@ -254,6 +306,15 @@ async function sendToESP32() {
     const formData = new FormData();
     formData.append('data', blob, 'image_data.bin');
 
+    const uploadStatusContainer = document.getElementById('upload-status-container')!;
+    const uploadStatusMessage = document.getElementById('upload-status-message')!;
+    const progressBarInner = document.getElementById('upload-progress-bar-inner')!;
+
+    uploadStatusContainer.style.display = 'block';
+    uploadStatusMessage.textContent = 'Uploading to frame...';
+    (progressBarInner as HTMLElement).style.transition = 'none';
+    (progressBarInner as HTMLElement).style.width = '0%';
+
     try {
         const response = await fetch(`http://${esp32IP}/upload`, {
             method: 'POST',
@@ -265,9 +326,19 @@ async function sendToESP32() {
         }
         const responseText = await response.text();
         console.log(`Server response: ${responseText}`);
+        if (responseText.includes("上传成功")) {
+            uploadStatusMessage.textContent = 'Refreshing...';
+            (progressBarInner as HTMLElement).offsetHeight;
+            (progressBarInner as HTMLElement).style.transition = 'width 35s linear';
+            (progressBarInner as HTMLElement).style.width = '100%';
+            setTimeout(() => {
+                uploadStatusContainer.style.display = 'none';
+            }, 35000);
+        }
     } catch (error) {
         console.error('Failed to send data:', error);
         alert('Unable to send data to ESP32 via Wi-Fi');
+        uploadStatusContainer.style.display = 'none';
     }
 }
 
@@ -340,7 +411,6 @@ async function switchToSlideShow() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Populate QR color pickers
     const qrColorSelect = document.getElementById('qr-color') as HTMLSelectElement;
     const qrBorderColorSelect = document.getElementById('qr-border-color') as HTMLSelectElement;
     rgbPalette.forEach(color => {
@@ -348,8 +418,8 @@ document.addEventListener('DOMContentLoaded', () => {
         qrColorSelect.add(option.cloneNode(true) as HTMLOptionElement);
         qrBorderColorSelect.add(option as HTMLOptionElement);
     });
-    qrColorSelect.value = 'rgb(0, 0, 0)'; // Default to black
-    qrBorderColorSelect.value = 'rgb(255, 255, 255)'; // Default to white
+    qrColorSelect.value = 'rgb(0, 0, 0)';
+    qrBorderColorSelect.value = 'rgb(255, 255, 255)';
 
     document.getElementById('upload')!.addEventListener('change', handleFileUpload);
     document.getElementById('sendToESP32')!.addEventListener('click', sendToESP32);
@@ -357,7 +427,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('downloadArray')!.addEventListener('click', downloadDataArray);
     document.getElementById('switchToRealTime')!.addEventListener('click', switchToRealTime);
     document.getElementById('switchToSlideShow')!.addEventListener('click', switchToSlideShow);
-
 
     const controlsToMonitor = [
         'ditherMode', 'ditherType', 'rotation', 'scaling', 'customScale',
@@ -368,25 +437,56 @@ document.addEventListener('DOMContentLoaded', () => {
     controlsToMonitor.forEach(id => {
         const element = document.getElementById(id);
         if (element) {
-            const eventType = (element.tagName === 'INPUT' && element.getAttribute('type') === 'range') ? 'input' : 'change';
+            const eventType = (element.tagName === 'INPUT' && (element.getAttribute('type') === 'range' || element.getAttribute('type') === 'number' || element.getAttribute('type') === 'text')) ? 'input' : 'change';
             element.addEventListener(eventType, () => {
+                updateSettingsTextarea();
                 updateImage();
             });
         }
     });
 
-    const settingsKey = 'neoframeSettings';
+    const qrCodeToggle = document.getElementById('qr-code-toggle') as HTMLInputElement;
+    const qrCodeOptions = document.getElementById('qr-code-options') as HTMLDivElement;
+    qrCodeToggle.addEventListener('change', () => {
+        qrCodeOptions.style.display = qrCodeToggle.checked ? 'block' : 'none';
+        updateImage();
+    });
 
+    const qrContentType = document.getElementById('qr-content-type') as HTMLSelectElement;
+    const qrCustomTextContainer = document.getElementById('qr-custom-text-container') as HTMLDivElement;
+    qrContentType.addEventListener('change', () => {
+        qrCustomTextContainer.style.display = qrContentType.value === 'custom' ? 'block' : 'none';
+        updateImage();
+    });
+
+    let lastQrColor = qrColorSelect.value;
+    let lastQrBorderColor = qrBorderColorSelect.value;
+    qrColorSelect.addEventListener('change', () => {
+        if (qrColorSelect.value === qrBorderColorSelect.value) {
+            qrBorderColorSelect.value = lastQrColor;
+        }
+        lastQrColor = qrColorSelect.value;
+        lastQrBorderColor = qrBorderColorSelect.value;
+        updateImage();
+    });
+    qrBorderColorSelect.addEventListener('change', () => {
+        if (qrBorderColorSelect.value === qrColorSelect.value) {
+            qrColorSelect.value = lastQrBorderColor;
+        }
+        lastQrColor = qrColorSelect.value;
+        lastQrBorderColor = qrBorderColorSelect.value;
+        updateImage();
+    });
+
+    const settingsKey = 'neoframeSettings';
     function saveSettingsToLocalStorage() {
         const settings = getSettings();
         localStorage.setItem(settingsKey, JSON.stringify(settings));
     }
-
     function updateSettingsTextarea() {
         const settings = getSettings();
         (document.getElementById('settings-json') as HTMLTextAreaElement).value = JSON.stringify(settings, null, 2);
     }
-
     document.getElementById('save-settings-button')!.addEventListener('click', () => {
         try {
             const settingsText = (document.getElementById('settings-json') as HTMLTextAreaElement).value;
@@ -398,7 +498,6 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Error parsing settings JSON. Please ensure it is valid.\n\n' + e.message);
         }
     });
-
     document.getElementById('clear-settings-button')!.addEventListener('click', () => {
         if (confirm('Are you sure you want to clear all saved settings and reload the page?')) {
             localStorage.removeItem(settingsKey);
@@ -406,6 +505,20 @@ document.addEventListener('DOMContentLoaded', () => {
             location.reload();
         }
     });
+    document.getElementById('autosave-settings')!.addEventListener('change', () => {
+        if ((document.getElementById('autosave-settings') as HTMLInputElement).checked) {
+            saveSettingsToLocalStorage();
+        }
+    });
+
+    const copyMinifiedButton = document.createElement('button');
+    copyMinifiedButton.textContent = 'Copy Minified';
+    copyMinifiedButton.addEventListener('click', () => {
+        const settings = getSettings();
+        navigator.clipboard.writeText(JSON.stringify(settings));
+        alert('Minified settings copied to clipboard.');
+    });
+    document.getElementById('settings-controls')!.appendChild(copyMinifiedButton);
 
     const savedSettings = localStorage.getItem(settingsKey);
     if (savedSettings) {
@@ -414,10 +527,9 @@ document.addEventListener('DOMContentLoaded', () => {
             applySettings(settings);
         } catch (e: any) {
             alert('Error parsing saved settings. Defaults will be loaded.\n\n' + e.message);
-            localStorage.removeItem(settingsKey); // Clear corrupted settings
+            localStorage.removeItem(settingsKey);
         }
     } else {
-        // If no settings are saved, populate the textarea with defaults
         updateSettingsTextarea();
     }
 });

@@ -5,6 +5,8 @@ node_modules
 out
 dist
 *.tgz
+dithered_image.png
+verification.png
 
 # code coverage
 coverage
@@ -12,6 +14,7 @@ coverage
 
 # logs
 logs
+server.log
 _.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
