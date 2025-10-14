@@ -89,6 +89,7 @@ async function main() {
         offscreenCtx.fillStyle = 'white';
         offscreenCtx.fillRect(0, 0, frameWidth, frameHeight);
 
+        const imageBoundingBox = { x: 0, y: 0, width: frameWidth, height: frameHeight };
         offscreenCtx.drawImage(sourceImage, 0, 0, frameWidth, frameHeight);
 
         const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);
@@ -127,7 +128,7 @@ async function main() {
             }
             const qrCanvas = createCanvas(200, 200);
             await generateQrCode(qrContent, qrCanvas);
-            drawQrCodeOnCanvas(ctx, qrCanvas, settings);
+            drawQrCodeOnCanvas(ctx, qrCanvas, settings, imageBoundingBox);
         }
 
         console.log('Image processing complete.');

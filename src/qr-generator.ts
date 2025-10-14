@@ -9,11 +9,11 @@ export async function generateQrCode(content: string, canvas: Canvas) {
     }
 }
 
-export function drawQrCodeOnCanvas(ctx: CanvasRenderingContext2D, qrCanvas: Canvas, config: any) {
+export function drawQrCodeOnCanvas(ctx: CanvasRenderingContext2D, qrCanvas: Canvas, config: any, imageBoundingBox: { x: number, y: number, width: number, height: number }) {
     const borderColor = config.qrBorderColor;
     const position = config.qrPosition;
     const margin = parseInt(config.qrMargin, 10);
-    const borderSize = 4; // module size
+    const borderSize = margin;
 
     const borderedCanvas = new Canvas(qrCanvas.width + borderSize * 2, qrCanvas.height + borderSize * 2);
     const borderedCtx = borderedCanvas.getContext('2d');
@@ -24,20 +24,20 @@ export function drawQrCodeOnCanvas(ctx: CanvasRenderingContext2D, qrCanvas: Canv
     let x = 0, y = 0;
     switch (position) {
         case 'bottom-right':
-            x = ctx.canvas.width - borderedCanvas.width - margin;
-            y = ctx.canvas.height - borderedCanvas.height - margin;
+            x = imageBoundingBox.x + imageBoundingBox.width - borderedCanvas.width;
+            y = imageBoundingBox.y + imageBoundingBox.height - borderedCanvas.height;
             break;
         case 'bottom-left':
-            x = margin;
-            y = ctx.canvas.height - borderedCanvas.height - margin;
+            x = imageBoundingBox.x;
+            y = imageBoundingBox.y + imageBoundingBox.height - borderedCanvas.height;
             break;
         case 'top-right':
-            x = ctx.canvas.width - borderedCanvas.width - margin;
-            y = margin;
+            x = imageBoundingBox.x + imageBoundingBox.width - borderedCanvas.width;
+            y = imageBoundingBox.y;
             break;
         case 'top-left':
-            x = margin;
-            y = margin;
+            x = imageBoundingBox.x;
+            y = imageBoundingBox.y;
             break;
     }
 

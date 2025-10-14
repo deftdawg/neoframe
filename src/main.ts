@@ -1,5 +1,6 @@
 import { getConfig, Config } from './config';
 import { adjustContrast, ditherImage, processImageData } from './algorithms';
+import { drawQrCodeOnCanvas } from './qr-generator';
 
 declare global {
     interface Window {
@@ -210,7 +211,7 @@ async function updateImage() {
                     qr.make();
                     const qrCanvas = document.createElement('canvas');
                     qr.renderTo2dContext(qrCanvas.getContext('2d'), 4);
-                    drawQrCodeOnCanvas(ctx, qrCanvas, settings);
+                    drawQrCodeOnCanvas(ctx, qrCanvas, settings, imageBoundingBox);
                 });
                 return;
         }
@@ -235,46 +236,10 @@ async function updateImage() {
             }
         }
 
-        drawQrCodeOnCanvas(ctx, qrCanvas, settings);
+        drawQrCodeOnCanvas(ctx, qrCanvas, settings, imageBoundingBox);
     }
 }
 
-function drawQrCodeOnCanvas(ctx: CanvasRenderingContext2D, qrCanvas: HTMLCanvasElement, config: any) {
-    const borderColor = config.qrBorderColor;
-    const position = config.qrPosition;
-    const margin = parseInt(config.qrMargin, 10);
-    const borderSize = 4; // module size
-
-    const borderedCanvas = document.createElement('canvas');
-    const borderedCtx = borderedCanvas.getContext('2d')!;
-    borderedCanvas.width = qrCanvas.width + borderSize * 2;
-    borderedCanvas.height = qrCanvas.height + borderSize * 2;
-    borderedCtx.fillStyle = borderColor;
-    borderedCtx.fillRect(0, 0, borderedCanvas.width, borderedCanvas.height);
-    borderedCtx.drawImage(qrCanvas, borderSize, borderSize);
-
-    let x = 0, y = 0;
-    switch (position) {
-        case 'bottom-right':
-            x = ctx.canvas.width - borderedCanvas.width - margin;
-            y = ctx.canvas.height - borderedCanvas.height - margin;
-            break;
-        case 'bottom-left':
-            x = margin;
-            y = ctx.canvas.height - borderedCanvas.height - margin;
-            break;
-        case 'top-right':
-            x = ctx.canvas.width - borderedCanvas.width - margin;
-            y = margin;
-            break;
-        case 'top-left':
-            x = margin;
-            y = margin;
-            break;
-    }
-
-    ctx.drawImage(borderedCanvas, x, y);
-}
 
 function handleFileUpload(event: Event) {
     const file = (event.target as HTMLInputElement).files![0];
