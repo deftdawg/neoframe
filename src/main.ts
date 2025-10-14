@@ -80,19 +80,21 @@ async function checkHealth() {
     statusIndicator.classList.remove('online', 'offline');
 
     try {
-        const response = await fetch(`http://${esp32IP}/health`, {
-            method: 'GET'
+        // The ESP32 does not return CORS headers, so we must use no-cors mode.
+        // This means we cannot inspect the response, but a successful fetch (not throwing an error)
+        // indicates the device is reachable.
+        await fetch(`http://${esp32IP}/health`, {
+            method: 'GET',
+            mode: 'no-cors',
         });
 
-        if (response.ok) {
-            statusIndicator.classList.add('online');
-            statusIndicator.title = 'Status: Online';
-            lastOnlineTimeElem.textContent = new Date().toLocaleTimeString();
-        } else {
-            throw new Error(`Health check failed with status: ${response.status}`);
-        }
+        statusIndicator.classList.add('online');
+        statusIndicator.title = 'Status: Online';
+        lastOnlineTimeElem.textContent = new Date().toLocaleTimeString();
 
     } catch (error) {
+        // This catch block will handle network errors, which indicate the device is offline.
+        // The browser will still log a CORS error in the console, which is expected.
         console.error('Health check failed:', error);
         statusIndicator.classList.add('offline');
         statusIndicator.title = 'Status: Offline';
