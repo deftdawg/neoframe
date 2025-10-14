@@ -243,20 +243,20 @@ async function updateImage() {
 
         let transformedPosition = position;
         if (rotation === 90) {
-            if (position === 'top-left') transformedPosition = 'bottom-left';
-            else if (position === 'top-right') transformedPosition = 'top-left';
-            else if (position === 'bottom-right') transformedPosition = 'top-right';
-            else if (position === 'bottom-left') transformedPosition = 'bottom-right';
+            if (position === 'top-left') transformedPosition = 'top-right';
+            else if (position === 'top-right') transformedPosition = 'bottom-right';
+            else if (position === 'bottom-right') transformedPosition = 'bottom-left';
+            else if (position === 'bottom-left') transformedPosition = 'top-left';
         } else if (rotation === 180) {
             if (position === 'top-left') transformedPosition = 'bottom-right';
             else if (position === 'top-right') transformedPosition = 'bottom-left';
             else if (position === 'bottom-right') transformedPosition = 'top-left';
             else if (position === 'bottom-left') transformedPosition = 'top-right';
         } else if (rotation === 270) {
-            if (position === 'top-left') transformedPosition = 'top-right';
-            else if (position === 'top-right') transformedPosition = 'bottom-right';
-            else if (position === 'bottom-right') transformedPosition = 'bottom-left';
-            else if (position === 'bottom-left') transformedPosition = 'top-left';
+            if (position === 'top-left') transformedPosition = 'bottom-left';
+            else if (position === 'top-right') transformedPosition = 'top-left';
+            else if (position === 'bottom-right') transformedPosition = 'top-right';
+            else if (position === 'bottom-left') transformedPosition = 'bottom-right';
         }
 
         let x = 0, y = 0;
