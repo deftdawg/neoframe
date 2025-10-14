@@ -211,7 +211,12 @@ async function updateImage() {
                     qr.make();
                     const qrCanvas = document.createElement('canvas');
                     qr.renderTo2dContext(qrCanvas.getContext('2d'), 4);
-                    drawQrCodeOnCanvas(ctx, qrCanvas, settings, imageBoundingBox);
+                    drawQrCodeOnCanvas(ctx, qrCanvas, settings, imageBoundingBox, (w, h) => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w;
+                        canvas.height = h;
+                        return canvas;
+                    });
                 });
                 return;
         }
@@ -236,7 +241,12 @@ async function updateImage() {
             }
         }
 
-        drawQrCodeOnCanvas(ctx, qrCanvas, settings, imageBoundingBox);
+        drawQrCodeOnCanvas(ctx, qrCanvas, settings, imageBoundingBox, (w, h) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            return canvas;
+        });
     }
 }
 

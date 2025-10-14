@@ -128,7 +128,7 @@ async function main() {
             }
             const qrCanvas = createCanvas(200, 200);
             await generateQrCode(qrContent, qrCanvas);
-            drawQrCodeOnCanvas(ctx, qrCanvas, settings, imageBoundingBox);
+            drawQrCodeOnCanvas(ctx, qrCanvas, settings, imageBoundingBox, createCanvas);
         }
 
         console.log('Image processing complete.');
