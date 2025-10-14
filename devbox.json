@@ -17,13 +17,13 @@
       "echo 'Checking for bun dependencies...'",
       "if [ ! -d 'node_modules/canvas' ]; then bun install; fi",
       "if [ ! -f 'node_modules/canvas/build/Release/canvas.node' ]; then npm install --build-from-source canvas; fi",
-      "echo '\n--- Build Instructions ---'",
-      "echo 'To build the browser version: bun build-browser.ts'",
-      "echo 'To build the CLI version: bun build-cli.ts'",
-      "echo '\n--- Run Instructions ---'",
-      "echo 'To run the CLI: ./dist/cli.js <path_to_image_or_url> <json_config_string_or_path_to_json> [--wait-for-online <seconds>]'",
-      "echo 'To run the web server: bun server.ts'",
-      "echo 'Then, open http://localhost:3000 in your browser.'"
+      "echo -e '\\n\\033[0;34m--- 🛠️ Build Instructions 🛠️ ---\\033[0m'",
+      "echo -e '\\033[0;32mTo build the browser version:\\033[0m bun build-browser.ts 🌐'",
+      "echo -e '\\033[0;32mTo build the CLI version:\\033[0m bun build-cli.ts 💻'",
+      "echo -e '\\n\\033[0;34m--- ▶️ Run Instructions ▶️ ---\\033[0m'",
+      "echo -e '\\033[0;32mTo run the CLI:\\033[0m ./dist/cli.js <path_to_image_or_url> <json_config_string_or_path_to_json> [--wait-for-online <seconds>] 🚀'",
+      "echo -e '\\033[0;32mTo run the web server:\\033[0m bun server.ts 🌐'",
+      "echo -e '\\033[0;32mThen, open http://localhost:3000 in your browser.\\033[0m'"
     ]
   }
 }
