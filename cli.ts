@@ -183,8 +183,9 @@ async function main() {
                     qrContent = exifString || "No EXIF data found.";
                     break;
             }
-            const qrCanvas = await generateQrCode(createCanvas, qrContent, 200);
-            drawQrCodeOnCanvas(offscreenCtx, qrCanvas, settings, imageBoundingBox);
+            const qrCanvas = createCanvas(200, 200);
+            await generateQrCode(qrContent, qrCanvas);
+            drawQrCodeOnCanvas(rotatedCtx, qrCanvas, settings, createCanvas);
         }
 
         const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);

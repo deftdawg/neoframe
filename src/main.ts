@@ -187,7 +187,7 @@ async function updateImage() {
                 qrContent = settings.qrCustomText;
                 break;
             case 'exif':
-                window.EXIF.getData(originalImage as any, function(this: any) {
+                window.EXIF.getData(originalImage as any, async function(this: any) {
                     const allMetaData = window.EXIF.getAllTags(this);
                     let exifString = '';
                     for (let tag in allMetaData) {
@@ -196,32 +196,26 @@ async function updateImage() {
                         }
                     }
                     qrContent = exifString || "No EXIF data found.";
-                    const qrCanvas = await generateQrCode(
-                        (w, h) => {
-                            const canvas = document.createElement('canvas');
-                            canvas.width = w;
-                            canvas.height = h;
-                            return canvas;
-                        },
-                        qrContent,
-                        200
-                    );
-                    drawQrCodeOnCanvas(offscreenCtx, qrCanvas, settings, imageBoundingBox);
+                    const qrCanvas = document.createElement('canvas');
+                    await generateQrCode(qrContent, qrCanvas);
+                    drawQrCodeOnCanvas(rotatedCtx, qrCanvas, settings, (w, h) => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w;
+                        canvas.height = h;
+                        return canvas;
+                    });
                 });
                 return;
         }
 
-        const qrCanvas = await generateQrCode(
-            (w, h) => {
-                const canvas = document.createElement('canvas');
-                canvas.width = w;
-                canvas.height = h;
-                return canvas;
-            },
-            qrContent,
-            200
-        );
-        drawQrCodeOnCanvas(offscreenCtx, qrCanvas, settings, imageBoundingBox);
+        const qrCanvas = document.createElement('canvas');
+        await generateQrCode(qrContent, qrCanvas);
+        drawQrCodeOnCanvas(rotatedCtx, qrCanvas, settings, (w, h) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            return canvas;
+        });
     }
 
     const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);
