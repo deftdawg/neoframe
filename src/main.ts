@@ -175,19 +175,9 @@ async function updateImage() {
     }
 
     if (settings.qrCodeEnabled) {
-        let qrContent = '';
-        switch (settings.qrContentType) {
-            case 'url':
-                qrContent = window.location.href;
-                break;
-            case 'wifi':
-                qrContent = `WIFI:T:WPA;S:NeoFrame;P:123456789;H:false;`;
-                break;
-            case 'custom':
-                qrContent = settings.qrCustomText;
-                break;
-            case 'exif':
-                window.EXIF.getData(originalImage as any, async function(this: any) {
+        const getQrContent = () => new Promise<string>((resolve) => {
+            if (settings.qrContentType === 'exif') {
+                window.EXIF.getData(originalImage as any, function(this: any) {
                     const allMetaData = window.EXIF.getAllTags(this);
                     let exifString = '';
                     for (let tag in allMetaData) {
@@ -195,27 +185,33 @@ async function updateImage() {
                             exifString += `${tag}: ${allMetaData[tag]}\n`;
                         }
                     }
-                    qrContent = exifString || "No EXIF data found.";
-                    const qrCanvas = document.createElement('canvas');
-                    await generateQrCode(qrContent, qrCanvas);
-                    drawQrCodeOnCanvas(rotatedCtx, qrCanvas, settings, (w, h) => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = w;
-                        canvas.height = h;
-                        return canvas;
-                    });
+                    resolve(exifString || "No EXIF data found.");
                 });
-                return;
-        }
+            } else {
+                let qrContent = '';
+                switch (settings.qrContentType) {
+                    case 'url':
+                        qrContent = window.location.href;
+                        break;
+                    case 'wifi':
+                        qrContent = `WIFI:T:WPA;S:NeoFrame;P:123456789;H:false;`;
+                        break;
+                    case 'custom':
+                        qrContent = settings.qrCustomText;
+                        break;
+                }
+                resolve(qrContent);
+            }
+        });
 
-        const qrCanvas = document.createElement('canvas');
-        await generateQrCode(qrContent, qrCanvas);
-        drawQrCodeOnCanvas(rotatedCtx, qrCanvas, settings, (w, h) => {
+        const qrContent = await getQrContent();
+        const qrCanvas = await generateQrCode((w, h) => {
             const canvas = document.createElement('canvas');
             canvas.width = w;
             canvas.height = h;
             return canvas;
-        });
+        }, qrContent);
+        drawQrCodeOnCanvas(offscreenCtx, qrCanvas, settings);
     }
 
     const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);
