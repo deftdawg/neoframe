@@ -12,6 +12,7 @@ export const defaultConfig = {
   qrCustomText: '',
   qrPosition: 'bottom-right',
   qrMargin: '20',
+  qrBorder: '0',
   qrColor: 'rgb(0, 0, 0)',
   qrBorderColor: 'rgb(255, 255, 255)',
   autosave: false,
