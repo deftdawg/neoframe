@@ -52,6 +52,26 @@ function getSettings(): Config {
     };
 }
 
+function updateScalingUI() {
+    const scalingSelect = document.getElementById('scaling') as HTMLSelectElement;
+    const customScalingContainer = document.getElementById('custom-scaling-container') as HTMLDivElement;
+    const scalePercentageSpan = document.getElementById('scale-percentage') as HTMLSpanElement;
+    const customScaleInput = document.getElementById('customScale') as HTMLInputElement;
+    const customScaleNumberInput = document.getElementById('customScaleNumber') as HTMLInputElement;
+
+    const scalingValue = scalingSelect.value;
+    if (scalingValue === 'custom' || scalingValue === 'custom_8x10') {
+        customScalingContainer.style.display = 'flex';
+        scalePercentageSpan.textContent = `(${customScaleInput.value}%)`;
+    } else {
+        customScalingContainer.style.display = 'none';
+        scalePercentageSpan.textContent = '';
+    }
+
+    // Sync the number input with the range
+    customScaleNumberInput.value = customScaleInput.value;
+}
+
 function applySettings(settings: Config) {
     (document.getElementById('esp32-ip') as HTMLInputElement).value = settings.esp32Ip;
     (document.getElementById('ditherMode') as HTMLSelectElement).value = settings.ditherMode;
@@ -69,6 +89,7 @@ function applySettings(settings: Config) {
     (document.getElementById('qr-color') as HTMLSelectElement).value = settings.qrColor;
     (document.getElementById('qr-border-color') as HTMLSelectElement).value = settings.qrBorderColor;
     (document.getElementById('autosave-settings') as HTMLInputElement).checked = settings.autosave;
+    updateScalingUI();
     updateImage();
 }
 
@@ -111,6 +132,8 @@ async function updateImage() {
     const settings = getSettings();
     const rotation = parseInt(settings.rotation, 10);
     const scalingMode = settings.scaling;
+    const customScaleInput = document.getElementById('customScale') as HTMLInputElement;
+    const customScaleNumberInput = document.getElementById('customScaleNumber') as HTMLInputElement;
 
     const rotatedCanvas = document.createElement('canvas');
     const rotatedCtx = rotatedCanvas.getContext('2d')!;
@@ -165,6 +188,8 @@ async function updateImage() {
             imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2 + offsetX;
             imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2 + offsetY;
             offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
+            customScaleInput.value = Math.round(scale * 100).toString();
+            customScaleNumberInput.value = customScaleInput.value;
             break;
         case 'original':
         case 'original_8x10':
@@ -174,6 +199,8 @@ async function updateImage() {
             imageBoundingBox.x = (targetWidth - imageBoundingBox.width) / 2 + offsetX;
             imageBoundingBox.y = (targetHeight - imageBoundingBox.height) / 2 + offsetY;
             offscreenCtx.drawImage(sourceImage, imageBoundingBox.x, imageBoundingBox.y, imageBoundingBox.width, imageBoundingBox.height);
+            customScaleInput.value = Math.round(scale * 100).toString();
+            customScaleNumberInput.value = customScaleInput.value;
             break;
         case 'custom':
         case 'custom_8x10':
@@ -204,6 +231,8 @@ async function updateImage() {
             imageBoundingBox.y = offsetY;
             imageBoundingBox.width = targetWidth;
             imageBoundingBox.height = targetHeight;
+            customScaleInput.value = Math.round(scale * 100).toString();
+            customScaleNumberInput.value = customScaleInput.value;
             break;
     }
 
@@ -410,7 +439,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(checkHealth, 10000);
 
     const controlsToMonitor = [
-        'ditherMode', 'ditherType', 'rotation', 'scaling', 'customScale',
+        'ditherMode', 'ditherType', 'rotation', 'scaling',
         'ditherStrength', 'contrast', 'qr-code-toggle', 'qr-content-type',
         'qr-custom-text', 'qr-position', 'qr-margin', 'qr-color', 'qr-border-color'
     ];
@@ -458,6 +487,42 @@ document.addEventListener('DOMContentLoaded', () => {
         lastQrBorderColor = qrBorderColorSelect.value;
         updateImage();
     });
+
+    // Scaling UI logic
+    const scalingSelect = document.getElementById('scaling') as HTMLSelectElement;
+    const customScaleInput = document.getElementById('customScale') as HTMLInputElement;
+    const customScaleNumberInput = document.getElementById('customScaleNumber') as HTMLInputElement;
+
+    scalingSelect.addEventListener('change', updateScalingUI);
+
+    customScaleInput.addEventListener('input', () => {
+        customScaleNumberInput.value = customScaleInput.value;
+        updateScalingUI();
+        updateSettingsTextarea();
+        updateImage();
+    });
+
+    customScaleNumberInput.addEventListener('input', () => {
+        customScaleInput.value = customScaleNumberInput.value;
+        updateScalingUI();
+        updateSettingsTextarea();
+        updateImage();
+    });
+
+    // Quick scale buttons
+    document.querySelectorAll('.quick-scale').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const scale = (e.target as HTMLElement).getAttribute('data-scale')!;
+            customScaleInput.value = scale;
+            customScaleNumberInput.value = scale;
+            updateScalingUI();
+            updateSettingsTextarea();
+            updateImage();
+        });
+    });
+
+    // Initial UI update
+    updateScalingUI();
 
     const settingsKey = 'neoframeSettings';
     function saveSettingsToLocalStorage() {
