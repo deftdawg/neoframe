@@ -4,6 +4,7 @@ import { loadImage, createCanvas, Image } from 'canvas';
 import { getConfig, Config } from './src/config';
 import { adjustContrast, ditherImage, processImageData } from './src/image-processor';
 import { generateQrCode, drawQrCodeOnCanvas } from './src/qr-generator';
+import { applyScaling } from './src/scaling';
 import { getExifData } from './src/exif-reader';
 
 async function waitForDevice(ip: string, timeout: number) {
@@ -83,13 +84,15 @@ async function main() {
 
         const sourceImage = rotatedCanvas;
 
+        const scalingMode = settings.scaling;
+
         const offscreenCanvas = createCanvas(frameWidth, frameHeight);
         const offscreenCtx = offscreenCanvas.getContext('2d');
 
         offscreenCtx.fillStyle = 'white';
         offscreenCtx.fillRect(0, 0, frameWidth, frameHeight);
 
-        offscreenCtx.drawImage(sourceImage, 0, 0, frameWidth, frameHeight);
+        const { imageBoundingBox } = applyScaling(sourceImage, offscreenCtx, settings, frameWidth, frameHeight);
 
         const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);
         adjustContrast(imageData, parseFloat(settings.contrast));
@@ -127,7 +130,7 @@ async function main() {
             }
             const qrCanvas = createCanvas(200, 200);
             await generateQrCode(qrContent, qrCanvas);
-            drawQrCodeOnCanvas(ctx, qrCanvas, settings, rotation);
+            drawQrCodeOnCanvas(ctx, qrCanvas, settings, rotation, imageBoundingBox);
         }
 
         console.log('Image processing complete.');
