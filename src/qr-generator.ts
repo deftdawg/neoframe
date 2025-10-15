@@ -9,17 +9,28 @@ export async function generateQrCode(content: string, canvas: Canvas) {
     }
 }
 
-export function drawQrCodeOnCanvas(ctx: CanvasRenderingContext2D, qrCanvas: Canvas, config: any, rotation: number) {
+export function drawQrCodeOnCanvas(
+    ctx: CanvasRenderingContext2D,
+    qrCanvas: Canvas | HTMLCanvasElement,
+    config: any,
+    rotation: number,
+    imageBoundingBox?: { x: number; y: number; width: number; height: number }
+) {
     const borderColor = config.qrBorderColor;
     const position = config.qrPosition;
     const margin = parseInt(config.qrMargin, 10);
     const borderSize = 4; // module size
 
-    const borderedCanvas = new Canvas(qrCanvas.width + borderSize * 2, qrCanvas.height + borderSize * 2);
-    const borderedCtx = borderedCanvas.getContext('2d');
+    const borderedCanvas =
+        qrCanvas instanceof HTMLCanvasElement
+            ? document.createElement('canvas')
+            : new Canvas(qrCanvas.width + borderSize * 2, qrCanvas.height + borderSize * 2);
+    const borderedCtx = borderedCanvas.getContext('2d')!;
+    borderedCanvas.width = qrCanvas.width + borderSize * 2;
+    borderedCanvas.height = qrCanvas.height + borderSize * 2;
     borderedCtx.fillStyle = borderColor;
     borderedCtx.fillRect(0, 0, borderedCanvas.width, borderedCanvas.height);
-    borderedCtx.drawImage(qrCanvas, borderSize, borderSize);
+    borderedCtx.drawImage(qrCanvas as any, borderSize, borderSize);
 
     let transformedPosition = position;
     if (rotation === 90) {
@@ -40,24 +51,29 @@ export function drawQrCodeOnCanvas(ctx: CanvasRenderingContext2D, qrCanvas: Canv
     }
 
     let x = 0, y = 0;
+    const targetWidth = imageBoundingBox ? imageBoundingBox.width : ctx.canvas.width;
+    const targetHeight = imageBoundingBox ? imageBoundingBox.height : ctx.canvas.height;
+    const offsetX = imageBoundingBox ? imageBoundingBox.x : 0;
+    const offsetY = imageBoundingBox ? imageBoundingBox.y : 0;
+
     switch (transformedPosition) {
         case 'bottom-right':
-            x = ctx.canvas.width - borderedCanvas.width - margin;
-            y = ctx.canvas.height - borderedCanvas.height - margin;
+            x = offsetX + targetWidth - borderedCanvas.width - margin;
+            y = offsetY + targetHeight - borderedCanvas.height - margin;
             break;
         case 'bottom-left':
-            x = margin;
-            y = ctx.canvas.height - borderedCanvas.height - margin;
+            x = offsetX + margin;
+            y = offsetY + targetHeight - borderedCanvas.height - margin;
             break;
         case 'top-right':
-            x = ctx.canvas.width - borderedCanvas.width - margin;
-            y = margin;
+            x = offsetX + targetWidth - borderedCanvas.width - margin;
+            y = offsetY + margin;
             break;
         case 'top-left':
-            x = margin;
-            y = margin;
+            x = offsetX + margin;
+            y = offsetY + margin;
             break;
     }
 
-    ctx.drawImage(borderedCanvas, x, y);
+    ctx.drawImage(borderedCanvas as any, x, y);
 }
