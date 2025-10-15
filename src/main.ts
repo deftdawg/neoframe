@@ -210,13 +210,85 @@ async function updateImage() {
     ditherImage(imageData, settings as Config);
     offscreenCtx.putImageData(imageData, 0, 0);
 
-    canvas.width = frameWidth;
-    canvas.height = frameHeight;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(offscreenCanvas, 0, 0);
+    const drawQrAndFinalize = (qrContent: string) => {
+        const qr = window.qrcode(0, 'L');
+        qr.addData(qrContent);
+        qr.make();
+        const qrCanvas = document.createElement('canvas');
+        const qrCtx = qrCanvas.getContext('2d')!;
+        const moduleCount = qr.getModuleCount();
+        const moduleSize = 4;
+        qrCanvas.width = moduleCount * moduleSize;
+        qrCanvas.height = moduleCount * moduleSize;
+        for (let row = 0; row < moduleCount; row++) {
+            for (let col = 0; col < moduleCount; col++) {
+                if (qr.isDark(row, col)) {
+                    qrCtx.fillStyle = settings.qrColor;
+                    qrCtx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
+                }
+            }
+        }
+
+        const borderColor = settings.qrBorderColor;
+        const position = settings.qrPosition;
+        const margin = parseInt(settings.qrMargin, 10);
+        const borderSize = 4; // module size
+        const borderedCanvas = document.createElement('canvas');
+        const borderedCtx = borderedCanvas.getContext('2d')!;
+        borderedCanvas.width = qrCanvas.width + borderSize * 2;
+        borderedCanvas.height = qrCanvas.height + borderSize * 2;
+        borderedCtx.fillStyle = borderColor;
+        borderedCtx.fillRect(0, 0, borderedCanvas.width, borderedCanvas.height);
+        borderedCtx.drawImage(qrCanvas, borderSize, borderSize);
+
+        let transformedPosition = position;
+        if (rotation === 90) {
+            if (position === 'top-left') transformedPosition = 'top-right';
+            else if (position === 'top-right') transformedPosition = 'bottom-right';
+            else if (position === 'bottom-right') transformedPosition = 'bottom-left';
+            else if (position === 'bottom-left') transformedPosition = 'top-left';
+        } else if (rotation === 180) {
+            if (position === 'top-left') transformedPosition = 'bottom-right';
+            else if (position === 'top-right') transformedPosition = 'bottom-left';
+            else if (position === 'bottom-right') transformedPosition = 'top-left';
+            else if (position === 'bottom-left') transformedPosition = 'top-right';
+        } else if (rotation === 270) {
+            if (position === 'top-left') transformedPosition = 'bottom-left';
+            else if (position === 'top-right') transformedPosition = 'top-left';
+            else if (position === 'bottom-right') transformedPosition = 'top-right';
+            else if (position === 'bottom-left') transformedPosition = 'bottom-right';
+        }
+
+        let x = 0, y = 0;
+        switch (transformedPosition) {
+            case 'bottom-right':
+                x = imageBoundingBox.x + imageBoundingBox.width - borderedCanvas.width - margin;
+                y = imageBoundingBox.y + imageBoundingBox.height - borderedCanvas.height - margin;
+                break;
+            case 'bottom-left':
+                x = imageBoundingBox.x + margin;
+                y = imageBoundingBox.y + imageBoundingBox.height - borderedCanvas.height - margin;
+                break;
+            case 'top-right':
+                x = imageBoundingBox.x + imageBoundingBox.width - borderedCanvas.width - margin;
+                y = imageBoundingBox.y + margin;
+                break;
+            case 'top-left':
+                x = imageBoundingBox.x + margin;
+                y = imageBoundingBox.y + margin;
+                break;
+        }
+
+        offscreenCtx.drawImage(borderedCanvas, x, y);
+
+        canvas.width = frameWidth;
+        canvas.height = frameHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(offscreenCanvas, 0, 0);
+    };
 
     if (settings.qrCodeEnabled) {
-        let qrContent = '';
+        let qrContent: string | null = null;
         switch (settings.qrContentType) {
             case 'url':
                 qrContent = window.location.href;
@@ -236,76 +308,19 @@ async function updateImage() {
                             exifString += `${tag}: ${allMetaData[tag]}\n`;
                         }
                     }
-                    qrContent = exifString || "No EXIF data found.";
-                    const qr = window.qrcode(0, 'L');
-                    qr.addData(qrContent);
-                    qr.make();
-                    const qrCanvas = document.createElement('canvas');
-                    qr.renderTo2dContext(qrCanvas.getContext('2d'), 4);
-                    drawQrCodeOnCanvas(ctx, qrCanvas, settings);
+                    drawQrAndFinalize(exifString || "No EXIF data found.");
                 });
-                return;
+                break;
         }
-
-        const qr = window.qrcode(0, 'L');
-        qr.addData(qrContent);
-        qr.make();
-        const qrCanvas = document.createElement('canvas');
-        const qrCtx = qrCanvas.getContext('2d')!;
-
-        const moduleCount = qr.getModuleCount();
-        const moduleSize = 4;
-        qrCanvas.width = moduleCount * moduleSize;
-        qrCanvas.height = moduleCount * moduleSize;
-
-        for (let row = 0; row < moduleCount; row++) {
-            for (let col = 0; col < moduleCount; col++) {
-                if (qr.isDark(row, col)) {
-                    qrCtx.fillStyle = settings.qrColor;
-                    qrCtx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
-                }
-            }
+        if (qrContent !== null) {
+            drawQrAndFinalize(qrContent);
         }
-
-        drawQrCodeOnCanvas(ctx, qrCanvas, settings);
+    } else {
+        canvas.width = frameWidth;
+        canvas.height = frameHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(offscreenCanvas, 0, 0);
     }
-}
-
-function drawQrCodeOnCanvas(ctx: CanvasRenderingContext2D, qrCanvas: HTMLCanvasElement, config: any) {
-    const borderColor = config.qrBorderColor;
-    const position = config.qrPosition;
-    const margin = parseInt(config.qrMargin, 10);
-    const borderSize = 4; // module size
-
-    const borderedCanvas = document.createElement('canvas');
-    const borderedCtx = borderedCanvas.getContext('2d')!;
-    borderedCanvas.width = qrCanvas.width + borderSize * 2;
-    borderedCanvas.height = qrCanvas.height + borderSize * 2;
-    borderedCtx.fillStyle = borderColor;
-    borderedCtx.fillRect(0, 0, borderedCanvas.width, borderedCanvas.height);
-    borderedCtx.drawImage(qrCanvas, borderSize, borderSize);
-
-    let x = 0, y = 0;
-    switch (position) {
-        case 'bottom-right':
-            x = ctx.canvas.width - borderedCanvas.width - margin;
-            y = ctx.canvas.height - borderedCanvas.height - margin;
-            break;
-        case 'bottom-left':
-            x = margin;
-            y = ctx.canvas.height - borderedCanvas.height - margin;
-            break;
-        case 'top-right':
-            x = ctx.canvas.width - borderedCanvas.width - margin;
-            y = margin;
-            break;
-        case 'top-left':
-            x = margin;
-            y = margin;
-            break;
-    }
-
-    ctx.drawImage(borderedCanvas, x, y);
 }
 
 function handleFileUpload(event: Event) {
