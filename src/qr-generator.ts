@@ -22,7 +22,7 @@ export function drawQrCodeOnCanvas(
     const borderSize = 4; // module size
 
     const borderedCanvas =
-        qrCanvas instanceof HTMLCanvasElement
+        'tagName' in qrCanvas && qrCanvas.tagName === 'CANVAS'
             ? document.createElement('canvas')
             : new Canvas(qrCanvas.width + borderSize * 2, qrCanvas.height + borderSize * 2);
     const borderedCtx = borderedCanvas.getContext('2d')!;
