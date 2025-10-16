@@ -1,9 +1,25 @@
 import { toCanvas } from 'qrcode';
 import { Canvas, CanvasRenderingContext2D } from 'canvas';
 
-export async function generateQrCode(content: string, canvas: Canvas) {
+function rgbToHex(rgb: string): string {
+const match = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+if (!match) return rgb;
+const r = parseInt(match[1], 10);
+const g = parseInt(match[2], 10);
+const b = parseInt(match[3], 10);
+return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+export async function generateQrCode(content: string, canvas: Canvas, config?: any) {
     try {
-        await toCanvas(canvas, content);
+        const options = config ? {
+            color: {
+                dark: rgbToHex(config.qrColor),
+                light: rgbToHex(config.qrBackgroundColor)
+            },
+            margin: parseInt(config.qrBorderSize) || 1
+        } : {};
+        await toCanvas(canvas, content, options);
     } catch (e) {
         console.error("Error generating QR code:", e);
     }
@@ -16,10 +32,10 @@ export function drawQrCodeOnCanvas(
     rotation: number,
     imageBoundingBox?: { x: number; y: number; width: number; height: number }
 ) {
-    const borderColor = config.qrBorderColor;
+    const borderColor = config.qrBackgroundColor;
     const position = config.qrPosition;
     const margin = parseInt(config.qrMargin, 10);
-    const borderSize = 4; // module size
+    const borderSize = 0; // No additional border since QR library handles margin
 
     const borderedCanvas =
         'tagName' in qrCanvas && qrCanvas.tagName === 'CANVAS'

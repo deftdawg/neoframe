@@ -13,7 +13,8 @@ export const defaultConfig = {
   qrPosition: 'bottom-right',
   qrMargin: '20',
   qrColor: 'rgb(0, 0, 0)',
-  qrBorderColor: 'rgb(255, 255, 255)',
+  qrBackgroundColor: 'rgb(255, 255, 255)',
+   qrBorderSize: '1',
   autosave: false,
 };
 

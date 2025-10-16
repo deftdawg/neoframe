@@ -58,7 +58,8 @@ function getSettings(): Config {
         qrPosition: (document.getElementById('qr-position') as HTMLSelectElement).value,
         qrMargin: (document.getElementById('qr-margin') as HTMLInputElement).value,
         qrColor: (document.getElementById('qr-color') as HTMLSelectElement).value,
-        qrBorderColor: (document.getElementById('qr-border-color') as HTMLSelectElement).value,
+        qrBackgroundColor: (document.getElementById('qr-background-color') as HTMLSelectElement).value,
+        qrBorderSize: (document.getElementById('qr-border-size') as HTMLInputElement).value,
         autosave: (document.getElementById('autosave-settings') as HTMLInputElement).checked
     };
 }
@@ -98,14 +99,15 @@ function applySettings(settings: Config) {
     (document.getElementById('qr-position') as HTMLSelectElement).value = settings.qrPosition;
     (document.getElementById('qr-margin') as HTMLInputElement).value = settings.qrMargin;
     (document.getElementById('qr-color') as HTMLSelectElement).value = settings.qrColor;
-    (document.getElementById('qr-border-color') as HTMLSelectElement).value = settings.qrBorderColor;
+    (document.getElementById('qr-background-color') as HTMLSelectElement).value = settings.qrBackgroundColor;
+    (document.getElementById('qr-border-size') as HTMLInputElement).value = settings.qrBorderSize;
     (document.getElementById('autosave-settings') as HTMLInputElement).checked = settings.autosave;
 
-    // Update UI visibility based on settings
-    const qrCodeOptions = document.getElementById('qr-code-options') as HTMLDivElement;
-    qrCodeOptions.style.display = settings.qrCodeEnabled ? 'block' : 'none';
-    const qrCustomTextContainer = document.getElementById('qr-custom-text-container') as HTMLDivElement;
-    qrCustomTextContainer.style.display = settings.qrContentType === 'custom' ? 'block' : 'none';
+    // Dispatch change events to update UI visibility
+    const qrCodeToggle = document.getElementById('qr-code-toggle') as HTMLInputElement;
+    qrCodeToggle.dispatchEvent(new Event('change', { bubbles: true }));
+    const qrContentType = document.getElementById('qr-content-type') as HTMLSelectElement;
+    qrContentType.dispatchEvent(new Event('change', { bubbles: true }));
 
     updateScalingUI();
     updateImage();
@@ -200,7 +202,7 @@ async function updateImage() {
     if (settings.qrCodeEnabled) {
         const drawQrAndFinalize = async (qrContent: string) => {
             const qrCanvas = document.createElement('canvas') as unknown as Canvas;
-            await generateQrCode(qrContent, qrCanvas);
+            await generateQrCode(qrContent, qrCanvas, settings);
             drawQrCodeOnCanvas(offscreenCtx, qrCanvas, settings, rotation, imageBoundingBox);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(offscreenCanvas, 0, 0);
@@ -375,14 +377,14 @@ async function switchToSlideShow() {
 
 document.addEventListener('DOMContentLoaded', () => {
     const qrColorSelect = document.getElementById('qr-color') as HTMLSelectElement;
-    const qrBorderColorSelect = document.getElementById('qr-border-color') as HTMLSelectElement;
+    const qrBackgroundColorSelect = document.getElementById('qr-background-color') as HTMLSelectElement;
     rgbPalette.forEach(color => {
         const option = new Option(color.name, `rgb(${color.r}, ${color.g}, ${color.b})`);
         qrColorSelect.add(option.cloneNode(true) as HTMLOptionElement);
-        qrBorderColorSelect.add(option as HTMLOptionElement);
+        qrBackgroundColorSelect.add(option as HTMLOptionElement);
     });
     qrColorSelect.value = 'rgb(0, 0, 0)';
-    qrBorderColorSelect.value = 'rgb(255, 255, 255)';
+    qrBackgroundColorSelect.value = 'rgb(255, 255, 255)';
 
     document.getElementById('upload')!.addEventListener('change', handleFileUpload);
     document.getElementById('sendToESP32')!.addEventListener('click', sendToESP32);
@@ -397,7 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const controlsToMonitor = [
         'ditherMode', 'ditherType', 'rotation', 'scaling',
         'ditherStrength', 'contrast', 'qr-code-toggle', 'qr-content-type',
-        'qr-custom-text', 'qr-position', 'qr-margin', 'qr-color', 'qr-border-color'
+        'qr-custom-text', 'qr-position', 'qr-margin', 'qr-color', 'qr-background-color', 'qr-border-size'
     ];
 
     controlsToMonitor.forEach(id => {
@@ -430,21 +432,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     let lastQrColor = qrColorSelect.value;
-    let lastQrBorderColor = qrBorderColorSelect.value;
+    let lastQrBackgroundColor = qrBackgroundColorSelect.value;
     qrColorSelect.addEventListener('change', () => {
-        if (qrColorSelect.value === qrBorderColorSelect.value) {
-            qrBorderColorSelect.value = lastQrColor;
+        if (qrColorSelect.value === qrBackgroundColorSelect.value) {
+            qrBackgroundColorSelect.value = lastQrColor;
         }
         lastQrColor = qrColorSelect.value;
-        lastQrBorderColor = qrBorderColorSelect.value;
+        lastQrBackgroundColor = qrBackgroundColorSelect.value;
         updateImage();
     });
-    qrBorderColorSelect.addEventListener('change', () => {
-        if (qrBorderColorSelect.value === qrColorSelect.value) {
-            qrColorSelect.value = lastQrBorderColor;
+    qrBackgroundColorSelect.addEventListener('change', () => {
+        if (qrBackgroundColorSelect.value === qrColorSelect.value) {
+            qrColorSelect.value = lastQrBackgroundColor;
         }
         lastQrColor = qrColorSelect.value;
-        lastQrBorderColor = qrBorderColorSelect.value;
+        lastQrBackgroundColor = qrBackgroundColorSelect.value;
         updateImage();
     });
 

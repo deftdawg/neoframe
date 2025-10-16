@@ -129,7 +129,7 @@ async function main() {
                     break;
             }
             const qrCanvas = createCanvas(200, 200);
-            await generateQrCode(qrContent, qrCanvas);
+            await generateQrCode(qrContent, qrCanvas, settings);
             drawQrCodeOnCanvas(ctx, qrCanvas, settings, rotation, imageBoundingBox);
         }
 
