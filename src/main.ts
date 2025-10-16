@@ -23,6 +23,16 @@ declare global {
 let originalImage: HTMLImageElement | null = null;
 window.originalImage = null;
 
+function debounce(func: Function, delay: number) {
+    let timeoutId: number;
+    return (...args: any[]) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => func.apply(null, args), delay);
+    };
+}
+
+const debouncedUpdateImage = debounce(updateImage, 2000);
+
 const rgbPalette = [
     { name: "Yellow", r: 255, g: 255, b: 0, value: 0xe2 },
     { name: "Green", r: 41, g: 204, b: 20, value: 0x96 },
@@ -386,10 +396,14 @@ document.addEventListener('DOMContentLoaded', () => {
     controlsToMonitor.forEach(id => {
         const element = document.getElementById(id);
         if (element) {
-            const eventType = (element.tagName === 'INPUT' && (element.getAttribute('type') === 'range' || element.getAttribute('type') === 'number' || element.getAttribute('type') === 'text')) ? 'input' : 'change';
+            const eventType = (element.tagName === 'INPUT' && (element.getAttribute('type') === 'range' || element.getAttribute('type') === 'number' || element.getAttribute('type') === 'text')) || element.tagName === 'TEXTAREA' ? 'input' : 'change';
             element.addEventListener(eventType, () => {
                 updateSettingsTextarea();
-                updateImage();
+                if (eventType === 'input') {
+                    debouncedUpdateImage();
+                } else {
+                    updateImage();
+                }
             });
         }
     });
@@ -438,14 +452,14 @@ document.addEventListener('DOMContentLoaded', () => {
         customScaleNumberInput.value = customScaleInput.value;
         updateScalingUI();
         updateSettingsTextarea();
-        updateImage();
+        debouncedUpdateImage();
     });
 
     customScaleNumberInput.addEventListener('input', () => {
         customScaleInput.value = customScaleNumberInput.value;
         updateScalingUI();
         updateSettingsTextarea();
-        updateImage();
+        debouncedUpdateImage();
     });
 
     // Quick scale buttons
