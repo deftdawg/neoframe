@@ -103,11 +103,11 @@ function applySettings(settings: Config) {
     (document.getElementById('qr-border-size') as HTMLInputElement).value = settings.qrBorderSize;
     (document.getElementById('autosave-settings') as HTMLInputElement).checked = settings.autosave;
 
-    // Dispatch change events to update UI visibility
-    const qrCodeToggle = document.getElementById('qr-code-toggle') as HTMLInputElement;
-    qrCodeToggle.dispatchEvent(new Event('change', { bubbles: true }));
-    const qrContentType = document.getElementById('qr-content-type') as HTMLSelectElement;
-    qrContentType.dispatchEvent(new Event('change', { bubbles: true }));
+    // Update UI visibility manually
+    const qrCodeOptions = document.getElementById('qr-code-options') as HTMLDivElement;
+    qrCodeOptions.style.display = settings.qrCodeEnabled ? 'block' : 'none';
+    const qrCustomTextContainer = document.getElementById('qr-custom-text-container') as HTMLDivElement;
+    qrCustomTextContainer.style.display = settings.qrContentType === 'custom' ? 'block' : 'none';
 
     updateScalingUI();
     updateImage();
@@ -510,7 +510,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm('Are you sure you want to clear all saved settings and reload the page?')) {
             localStorage.removeItem(settingsKey);
             alert('Settings cleared. The page will now reload to defaults.');
-            location.reload();
+            // Force a clean reload by adding a cache-busting query parameter
+            location.href = location.href.split('?')[0] + '?t=' + Date.now();
         }
     });
     document.getElementById('autosave-settings')!.addEventListener('change', () => {
