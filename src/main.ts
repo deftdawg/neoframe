@@ -100,6 +100,13 @@ function applySettings(settings: Config) {
     (document.getElementById('qr-color') as HTMLSelectElement).value = settings.qrColor;
     (document.getElementById('qr-border-color') as HTMLSelectElement).value = settings.qrBorderColor;
     (document.getElementById('autosave-settings') as HTMLInputElement).checked = settings.autosave;
+
+    // Update UI visibility based on settings
+    const qrCodeOptions = document.getElementById('qr-code-options') as HTMLDivElement;
+    qrCodeOptions.style.display = settings.qrCodeEnabled ? 'block' : 'none';
+    const qrCustomTextContainer = document.getElementById('qr-custom-text-container') as HTMLDivElement;
+    qrCustomTextContainer.style.display = settings.qrContentType === 'custom' ? 'block' : 'none';
+
     updateScalingUI();
     updateImage();
 }
