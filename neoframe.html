@@ -177,6 +177,10 @@
             background-color: #dc3545; /* Red */
         }
 
+        #online-status-indicator.grey {
+            background-color: #6c757d; /* Grey */
+        }
+
         #status-container {
             font-size: 0.8em;
             margin-top: 8px;
@@ -279,9 +283,14 @@
                     <div id="online-status-indicator" title="Status: Unknown"></div>
                 </div>
                 <div id="status-container">
-                    <span>Last Online: <span id="last-online-time">N/A</span></span>
+                    <span id="mode-text">UNKNOWN</span>
                     <span style="margin: 0 5px;">|</span>
-                    <span>Last Checked: <span id="last-checked-time">N/A</span></span>
+                    <span>Last Online: <span id="last-online-time">N/A</span></span>
+                <span style="margin: 0 5px;">|</span>
+                <span>Last Checked: <span id="last-checked-time">N/A</span></span>
+                </div>
+                    <div id="proxy-cli-container" style="display: none; margin-top: 5px;">
+                    <input type="checkbox" id="proxy-cli-checkbox" style="margin-right: 8px;">Use CLI Processing
                 </div>
             </div>
             <div class="controls-group">

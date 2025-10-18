@@ -113,35 +113,120 @@ function applySettings(settings: Config) {
     updateImage();
 }
 
+function getCurrentMode(): NeoFrameMode {
+    const cliCheckbox = document.getElementById('proxy-cli-checkbox') as HTMLInputElement;
+
+    // Mode detection based on browser URL, not ESP32 IP
+    if (window.location.protocol === 'file:') {
+        return 'direct';
+    } else if (cliCheckbox && cliCheckbox.checked) {
+        return 'proxy-cli';
+    } else {
+        return 'proxy';
+    }
+}
+
+async function updateModeIndicator(modeStatus: ModeStatus) {
+    const statusIndicator = document.getElementById('online-status-indicator');
+    const modeTextElement = document.getElementById('mode-text');
+
+    if (!statusIndicator || !modeTextElement) {
+        console.warn('Mode indicator elements not found in DOM');
+        return;
+    }
+
+    statusIndicator.classList.remove('online', 'offline', 'grey');
+    statusIndicator.style.backgroundColor = ''; // Reset custom colors
+    modeTextElement.textContent = modeStatus.text;
+
+    switch (modeStatus.color) {
+        case 'green':
+            statusIndicator.classList.add('online');
+            break;
+        case 'red':
+            statusIndicator.classList.add('offline');
+            break;
+        case 'amber':
+            statusIndicator.style.backgroundColor = '#ffc107'; // Amber/yellow
+            break;
+        case 'grey':
+            statusIndicator.classList.add('grey');
+            break;
+    }
+}
+
 async function checkHealth() {
     const esp32IP = (document.getElementById('esp32-ip') as HTMLInputElement).value;
-    const statusIndicator = document.getElementById('online-status-indicator')!;
-    const lastOnlineTimeElem = document.getElementById('last-online-time')!;
-    const lastCheckedTimeElem = document.getElementById('last-checked-time')!;
+    const lastOnlineTimeElem = document.getElementById('last-online-time');
+    const lastCheckedTimeElem = document.getElementById('last-checked-time');
+    const cliCheckboxContainer = document.getElementById('proxy-cli-container');
+
+    if (!lastOnlineTimeElem || !lastCheckedTimeElem) {
+        console.warn('Status elements not found in DOM');
+        return;
+    }
 
     lastCheckedTimeElem.textContent = new Date().toLocaleTimeString();
-    statusIndicator.classList.remove('online', 'offline');
+
+    const mode = getCurrentMode();
+    let modeStatus: ModeStatus;
 
     try {
-        // The ESP32 does not return CORS headers, so we must use no-cors mode.
-        // This means we cannot inspect the response, but a successful fetch (not throwing an error)
-        // indicates the device is reachable.
-        await fetch(`http://${esp32IP}/health`, {
-            method: 'GET',
-            mode: 'no-cors',
-        });
+        if (mode === 'direct') {
+            // Direct mode - check ESP32 directly using ESP32 IP
+            try {
+                await fetch(`http://${esp32IP}/health`, {
+                    method: 'GET',
+                    mode: 'no-cors',
+                    signal: AbortSignal.timeout(4000), // 4 second timeout
+                });
+                modeStatus = { mode: 'direct', color: 'green', text: 'DIRECT' };
+                lastOnlineTimeElem.textContent = new Date().toLocaleTimeString();
+            } catch (directError) {
+                // ESP32 not available - this is expected during development
+                console.log('Direct mode: ESP32 not reachable (this is normal)');
+                modeStatus = { mode: 'direct', color: 'grey', text: 'DIRECT' };
+            }
+            if (cliCheckboxContainer) cliCheckboxContainer.style.display = 'none';
+        } else {
+            // Proxy mode - check proxy server (current browser location)
+            try {
+                const proxyUrl = new URL(`${window.location.origin}/health`);
+                proxyUrl.searchParams.set('esp32_ip', esp32IP);
+                const response = await fetch(proxyUrl.toString(), {
+                    method: 'GET',
+                    mode: 'cors',
+                    signal: AbortSignal.timeout(6000), // 6 second timeout (longer than server)
+                });
 
-        statusIndicator.classList.add('online');
-        statusIndicator.title = 'Status: Online';
-        lastOnlineTimeElem.textContent = new Date().toLocaleTimeString();
+                if (cliCheckboxContainer) cliCheckboxContainer.style.display = 'block';
+
+                if (response.status === 200) {
+                    modeStatus = { mode: mode, color: 'green', text: mode === 'proxy-cli' ? 'PROXY-CLI' : 'PROXY' };
+                    lastOnlineTimeElem.textContent = new Date().toLocaleTimeString();
+                } else if (response.status === 504) {
+                    modeStatus = { mode: mode, color: 'amber', text: mode === 'proxy-cli' ? 'PROXY-CLI' : 'PROXY' };
+                } else {
+                    modeStatus = { mode: mode, color: 'red', text: mode === 'proxy-cli' ? 'PROXY-CLI' : 'PROXY' };
+                }
+            } catch (proxyError) {
+                // Proxy server not running - this is expected during development
+                console.log('Proxy mode: Server not reachable (run `bun run server.ts`)');
+                modeStatus = { mode: mode, color: 'grey', text: mode === 'proxy-cli' ? 'PROXY-CLI' : 'PROXY' };
+                if (cliCheckboxContainer) cliCheckboxContainer.style.display = 'block';
+            }
+        }
 
     } catch (error) {
-        // This catch block will handle network errors, which indicate the device is offline.
-        // The browser will still log a CORS error in the console, which is expected.
-        console.error('Health check failed:', error);
-        statusIndicator.classList.add('offline');
-        statusIndicator.title = 'Status: Offline';
+        // This should rarely happen now with the nested try-catch blocks above
+        console.error('Unexpected health check error:', error);
+        modeStatus = { mode: mode, color: 'red', text: mode === 'proxy-cli' ? 'PROXY-CLI' : 'PROXY' };
+        if (cliCheckboxContainer) {
+            cliCheckboxContainer.style.display = mode === 'direct' ? 'none' : 'block';
+        }
     }
+
+    updateModeIndicator(modeStatus);
 }
 
 async function updateImage() {
@@ -267,44 +352,89 @@ async function sendToESP32() {
     const settings = getSettings();
     const processedData = processImageData(imageData, settings as Config);
     const esp32IP = settings.esp32Ip;
-    const blob = new Blob([processedData], { type: 'application/octet-stream' });
-    const formData = new FormData();
-    formData.append('data', blob, 'image_data.bin');
+    const mode = getCurrentMode();
 
     const uploadStatusContainer = document.getElementById('upload-status-container')!;
-    const uploadStatusMessage = document.getElementById('upload-status-message')!;
+const uploadStatusMessage = document.getElementById('upload-status-message')!;
     const progressBarInner = document.getElementById('upload-progress-bar-inner')!;
 
     uploadStatusContainer.style.display = 'block';
-    uploadStatusMessage.textContent = 'Uploading to frame...';
+uploadStatusMessage.textContent = 'Uploading to frame...';
     (progressBarInner as HTMLElement).style.transition = 'none';
     (progressBarInner as HTMLElement).style.width = '0%';
 
     try {
-        const response = await fetch(`http://${esp32IP}/upload`, {
-            method: 'POST',
-            body: formData,
+if (mode === 'proxy-cli') {
+    // Send raw image to proxy /cli endpoint
+        const rawImageBlob = new Blob([originalImage], { type: 'image/*' });
+            const formData = new FormData();
+            formData.append('image', rawImageBlob);
+
+        const settingsJson = JSON.stringify(settings);
+        const url = new URL(`${window.location.origin}/cli`);
+            url.searchParams.set('settings', settingsJson);
+
+        const response = await fetch(url.toString(), {
+        method: 'POST',
+        body: formData,
             mode: 'cors'
-        });
-        if (!response.ok) {
+            });
+
+            if (!response.ok) {
             throw new Error(`Error: ${response.statusText}`);
-        }
+            }
+
         const responseText = await response.text();
-        console.log(`Server response: ${responseText}`);
-        if (responseText.includes("上传成功")) {
-            uploadStatusMessage.textContent = 'Refreshing...';
-            (progressBarInner as HTMLElement).offsetHeight;
-            (progressBarInner as HTMLElement).style.transition = 'width 35s linear';
-            (progressBarInner as HTMLElement).style.width = '100%';
-            setTimeout(() => {
-                uploadStatusContainer.style.display = 'none';
-            }, 35000);
-        }
-    } catch (error) {
-        console.error('Failed to send data:', error);
-        alert('Unable to send data to ESP32 via Wi-Fi');
-        uploadStatusContainer.style.display = 'none';
-    }
+    console.log(`CLI Server response: ${responseText}`);
+
+        } else {
+        // Direct or Proxy mode - send processed data
+    const blob = new Blob([processedData], { type: 'application/octet-stream' });
+const formData = new FormData();
+formData.append('data', blob, 'image_data.bin');
+
+let uploadUrl: string;
+if (mode === 'direct') {
+uploadUrl = `http://${esp32IP}/upload`;
+} else {
+// Proxy mode - send to proxy server
+const proxyUrl = new URL(`${window.location.origin}/upload`);
+    proxyUrl.searchParams.set('esp32_ip', esp32IP);
+                uploadUrl = proxyUrl.toString();
+            }
+
+const response = await fetch(uploadUrl, {
+method: 'POST',
+body: formData,
+mode: 'cors'
+});
+
+if (!response.ok) {
+throw new Error(`Error: ${response.statusText}`);
+}
+
+const responseText = await response.text();
+console.log(`Server response: ${responseText}`);
+
+if (responseText.includes("上传成功")) {
+uploadStatusMessage.textContent = 'Refreshing...';
+(progressBarInner as HTMLElement).offsetHeight;
+(progressBarInner as HTMLElement).style.transition = 'width 35s linear';
+(progressBarInner as HTMLElement).style.width = '100%';
+setTimeout(() => {
+uploadStatusContainer.style.display = 'none';
+}, 35000);
+return;
+}
+}
+
+uploadStatusContainer.style.display = 'none';
+
+} catch (error) {
+console.error('Failed to send data:', error);
+alert('Unable to send data to ESP32 via Wi-Fi');
+uploadStatusContainer.style.display = 'none';
+}
 }
 
 function downloadImage() {
@@ -395,6 +525,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     checkHealth();
     setInterval(checkHealth, 10000);
+
+    // CLI checkbox change handler
+    const cliCheckbox = document.getElementById('proxy-cli-checkbox') as HTMLInputElement;
+    if (cliCheckbox) {
+        cliCheckbox.addEventListener('change', checkHealth);
+    }
 
     const controlsToMonitor = [
         'ditherMode', 'ditherType', 'rotation', 'scaling',
