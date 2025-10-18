@@ -5,6 +5,7 @@
 ## Dev environment tips
 
 - Think hard to produce solutions that are as simple and concise as possible to achieve the requirements
+- Avoid duplicating identical/near-identical logic in multiple places, whenever identical logic is needed try to refactor that logic to a centralized location where all instances can use it.
 - Use `devbox` to manage dependencies, do not specify package versions, include colourize build and example run instructions in the init_hook along with any pre-build setup that needs to be done.
 - Use `bun` to build project for all targets
 - Anytime a UI control is implemented, it should be done such that if it's state is active on restoration that element is visible to the user and if that control takes input from the user it has a debounce delay of 2 seconds before it effects any rendering changes to avoid frustrating the user with too many rerendering delays
