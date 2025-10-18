@@ -68,8 +68,18 @@ async function handleCli(request: Request): Promise<Response> {
                     return new Response(`Image file too large. Maximum size: ${MAX_IMAGE_SIZE_MB}MB`, { status: 413 });
                 }
 
-                // Save uploaded image to temp file
-                imagePath = "/tmp/neoframe-uploaded-image";
+                // Save uploaded image to temp file with appropriate extension
+                let extension = "";
+                if (imageFile.type === "image/png") {
+                    extension = ".png";
+                } else if (imageFile.type === "image/jpeg") {
+                    extension = ".jpg";
+                } else if (imageFile.type === "image/gif") {
+                    extension = ".gif";
+                } else {
+                    extension = ".bin"; // fallback
+                }
+                imagePath = `/tmp/neoframe-uploaded-image${extension}`;
                 const imageBuffer = await imageFile.arrayBuffer();
                 await writeFile(imagePath, new Uint8Array(imageBuffer));
             } else {
@@ -79,16 +89,34 @@ async function handleCli(request: Request): Promise<Response> {
             return new Response("Expected multipart form data with image", { status: 400 });
         }
 
-        // Here you would call cli.js with the settings and image
-        // For now, just log and simulate processing
-        console.log("CLI processing requested with settings:", settings);
-        console.log("ESP32 IP:", esp32Ip);
-        if (imagePath) {
-            console.log("Image file saved to:", imagePath);
-        }
+        // Run CLI processing
+        let uploadResponse = "CLI processing completed";
+        try {
+            const cliProcess = Bun.spawn(['./cli.ts', imagePath, JSON.stringify(settings)], {
+                cwd: process.cwd(),
+                stdout: 'pipe',
+                stderr: 'pipe'
+            });
 
-        // TODO: Implement actual CLI processing
-        // const result = await runCliProcessing(settings, imagePath);
+            const exitCode = await cliProcess.exited;
+            const stdout = await new Response(cliProcess.stdout).text();
+            const stderr = await new Response(cliProcess.stderr).text();
+
+            if (exitCode !== 0) {
+                console.error("CLI stderr:", stderr);
+                return new Response(`CLI processing failed: ${stderr}`, { status: 500 });
+            }
+
+            console.log("CLI stdout:", stdout);
+
+            // Extract the upload response from CLI output
+            const uploadResponseMatch = stdout.match(/Upload response: (.+)/);
+            uploadResponse = uploadResponseMatch ? uploadResponseMatch[1] : "CLI processing completed";
+
+        } catch (error) {
+            console.error("Failed to run CLI:", error);
+            return new Response("Failed to run CLI processing", { status: 500 });
+        }
 
         // Clean up temp file
         if (imagePath) {
@@ -99,7 +127,7 @@ async function handleCli(request: Request): Promise<Response> {
             }
         }
 
-        return new Response("CLI processing completed", { status: 200 });
+        return new Response(uploadResponse, { status: 200 });
 
     } catch (error) {
         console.error("CLI processing error:", error);

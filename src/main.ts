@@ -21,6 +21,7 @@ declare global {
 }
 
 let originalImage: HTMLImageElement | null = null;
+let originalImageFile: File | null = null;
 window.originalImage = null;
 
 function debounce(func: Function, delay: number) {
@@ -329,6 +330,7 @@ async function updateImage() {
 function handleFileUpload(event: Event) {
     const file = (event.target as HTMLInputElement).files![0];
     (event.target as HTMLInputElement).value = '';
+    originalImageFile = file;
     const reader = new FileReader();
 
     reader.onload = function (e) {
@@ -355,37 +357,51 @@ async function sendToESP32() {
     const mode = getCurrentMode();
 
     const uploadStatusContainer = document.getElementById('upload-status-container')!;
-const uploadStatusMessage = document.getElementById('upload-status-message')!;
+    const uploadStatusMessage = document.getElementById('upload-status-message')!;
     const progressBarInner = document.getElementById('upload-progress-bar-inner')!;
 
+    function showRefreshProgress() {
+        uploadStatusMessage.textContent = 'Refreshing...';
+        (progressBarInner as HTMLElement).offsetHeight;
+        (progressBarInner as HTMLElement).style.transition = 'width 35s linear';
+        (progressBarInner as HTMLElement).style.width = '100%';
+        setTimeout(() => {
+            uploadStatusContainer.style.display = 'none';
+        }, 35000);
+    }
+
     uploadStatusContainer.style.display = 'block';
-uploadStatusMessage.textContent = 'Uploading to frame...';
+    uploadStatusMessage.textContent = 'Uploading to frame...';
     (progressBarInner as HTMLElement).style.transition = 'none';
     (progressBarInner as HTMLElement).style.width = '0%';
 
+    let responseText: string;
     try {
-if (mode === 'proxy-cli') {
-    // Send raw image to proxy /cli endpoint
-        const rawImageBlob = new Blob([originalImage], { type: 'image/*' });
+        if (mode === 'proxy-cli') {
+            // Send raw image to proxy /cli endpoint
+            if (!originalImageFile) {
+                alert('No image file available for CLI processing');
+                return;
+            }
             const formData = new FormData();
-            formData.append('image', rawImageBlob);
+            formData.append('image', originalImageFile);
 
-        const settingsJson = JSON.stringify(settings);
-        const url = new URL(`${window.location.origin}/cli`);
+            const settingsJson = JSON.stringify(settings);
+            const url = new URL(`${window.location.origin}/cli`);
             url.searchParams.set('settings', settingsJson);
 
-        const response = await fetch(url.toString(), {
-        method: 'POST',
-        body: formData,
-            mode: 'cors'
+            const response = await fetch(url.toString(), {
+                method: 'POST',
+                body: formData,
+                mode: 'cors'
             });
 
             if (!response.ok) {
-            throw new Error(`Error: ${response.statusText}`);
+                throw new Error(`Error: ${response.statusText}`);
             }
 
-        const responseText = await response.text();
-    console.log(`CLI Server response: ${responseText}`);
+            responseText = await response.text();
+            console.log(`CLI Server response: ${responseText}`);
 
         } else {
         // Direct or Proxy mode - send processed data
@@ -413,20 +429,15 @@ if (!response.ok) {
 throw new Error(`Error: ${response.statusText}`);
 }
 
-const responseText = await response.text();
+responseText = await response.text();
 console.log(`Server response: ${responseText}`);
+}
 
-if (responseText.includes("上传成功")) {
-uploadStatusMessage.textContent = 'Refreshing...';
-(progressBarInner as HTMLElement).offsetHeight;
-(progressBarInner as HTMLElement).style.transition = 'width 35s linear';
-(progressBarInner as HTMLElement).style.width = '100%';
-setTimeout(() => {
-uploadStatusContainer.style.display = 'none';
-}, 35000);
-return;
-}
-}
+        // Check for upload success in both modes
+        if (responseText && responseText.includes("上传成功")) {
+            showRefreshProgress();
+            return;
+        }
 
 uploadStatusContainer.style.display = 'none';
 
