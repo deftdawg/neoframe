@@ -1,4 +1,4 @@
-import { ExifImage } from 'exif';
+const ExifImage = require('exif').ExifImage;
 
 export function getExifData(imageBuffer: Buffer): Promise<any> {
     return new Promise((resolve) => {
@@ -8,7 +8,9 @@ export function getExifData(imageBuffer: Buffer): Promise<any> {
                     console.error('Error parsing EXIF data:', error.message);
                     resolve(null);
                 } else {
-                    resolve(exifData);
+                    // Combine exif, gps, image into tags to match exif-js structure
+                    const tags = { ...exifData.exif, ...exifData.gps, ...exifData.image };
+                    resolve({ tags });
                 }
             });
         } catch (e: any) {

@@ -10,7 +10,7 @@ const b = parseInt(match[3], 10);
 return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
 }
 
-export async function generateQrCode(content: string, canvas: Canvas, config?: any) {
+export async function generateQrCode(content: string, config?: any): Promise<Canvas | HTMLCanvasElement> {
     try {
         const options = config ? {
             color: {
@@ -19,9 +19,22 @@ export async function generateQrCode(content: string, canvas: Canvas, config?: a
             },
             margin: parseInt(config.qrBorderSize) || 1
         } : {};
-        await toCanvas(canvas, content, options);
+        console.log('QR options:', options);
+        if (typeof window !== 'undefined') {
+            // Browser
+            const canvas = document.createElement('canvas');
+            await toCanvas(canvas, content, options);
+            return canvas;
+        } else {
+            // Node
+            const { createCanvas } = require('canvas');
+            const canvas = createCanvas(200, 200);
+            await toCanvas(canvas, content, options);
+            return canvas;
+        }
     } catch (e) {
         console.error("Error generating QR code:", e);
+        throw e;
     }
 }
 

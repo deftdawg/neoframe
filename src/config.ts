@@ -16,6 +16,9 @@ export const defaultConfig = {
   qrBackgroundColor: 'rgb(255, 255, 255)',
    qrBorderSize: '1',
   autosave: false,
+  qrExifLabels: true,
+  qrExifGps: false,
+  qrExifMaps: false,
 };
 
 export type Config = typeof defaultConfig;
