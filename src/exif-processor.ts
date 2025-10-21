@@ -3,7 +3,7 @@ export function processExifData(allMetaData: any, settings: any): string {
     const model = allMetaData.Model || 'Unknown';
     let lens = allMetaData.LensModel || allMetaData.LensInfo || 'Unknown';
     const focalLength = allMetaData.FocalLength ? parseFloat(allMetaData.FocalLength) : null;
-    const focalLength35 = allMetaData.FocalLengthIn35mmFilm ? parseInt(allMetaData.FocalLengthIn35mmFilm) : null;
+    const focalLength35 = allMetaData.FocalLengthIn35mmFormat ? parseInt(allMetaData.FocalLengthIn35mmFormat) : null;
 
     function getiPhoneLensCategory(focalLength35: number): string {
         if (focalLength35 <= 20) return 'Ultra Wide';
@@ -19,8 +19,11 @@ export function processExifData(allMetaData: any, settings: any): string {
         return 'Super Tele';
     }
 
-    if (lens === 'Unknown' && focalLength35) {
+    // console.log('Exif data:', allMetaData);
+    if (focalLength35) {
         lens = (make == "Apple") ? getiPhoneLensCategory(focalLength35): getLensCategory(focalLength35);
+    } else {
+        console.log('Focal length in 35mm not found, cannot determine lens category.');
     }
     const exposureTime = allMetaData.ExposureTime ? `1/${Math.round(1 / parseFloat(allMetaData.ExposureTime))}` : null;
     const fNumber = allMetaData.FNumber ? parseFloat(allMetaData.FNumber) : null;
