@@ -6,8 +6,8 @@ Adds:
 - scaling
 - QR code overlays
 - 8x10 Ikea RODALM frame fit
-- cli mode (provide image filename/url + settings from browser UI)
-- proxy mode (http to proxy over ethernet, proxy connects via WIFI to frame)
-- proxy-cli mode (cli mode via proxy mode)
+- cli mode via `cli.ts` (provide image filename/url + settings from browser UI)
+- proxy mode via `bun server.ts`/localhost:3000 (http to proxy over ethernet, proxy connects via WIFI to frame)
+- proxy-cli mode (`cli.ts` via proxy mode)
 
 <img width="2525" height="1883" alt="image" src="https://github.com/user-attachments/assets/463736f4-0b4d-4fcb-b115-708428d4795d" />
