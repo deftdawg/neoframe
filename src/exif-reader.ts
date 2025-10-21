@@ -1,4 +1,4 @@
-const exifr = require('exifr');
+const exifr = require('@sitemark/exifr');
 
 export function getExifData(imageBuffer: Buffer): Promise<any> {
     try {

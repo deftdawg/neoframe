@@ -40,7 +40,7 @@ export async function generateQrContent(params: QrContentParams): Promise<string
             if (isBrowser && originalImage) {
                 // Browser implementation
                 return new Promise((resolve) => {
-                    import('exifr').then((exifr: any) => {
+                    import('@sitemark/exifr').then((exifr: any) => {
                         (exifr.default || exifr).parse(originalImage).then((allMetaData: any) => {
                             const hasExif = !!(allMetaData?.Make || allMetaData?.Model || allMetaData?.LensModel || allMetaData?.LensInfo || allMetaData?.FocalLength || allMetaData?.FocalLengthIn35mmFilm || allMetaData?.ExposureTime || allMetaData?.FNumber || allMetaData?.ISOSpeedRatings || allMetaData?.GPSLatitude);
                             if (!hasExif) {
