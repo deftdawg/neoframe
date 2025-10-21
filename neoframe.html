@@ -265,7 +265,6 @@
             }
         }
     </style>
-    <script src="scripts/exif.js"></script>
     <script src="dist/main.js"></script>
 </head>
 <body>
@@ -364,8 +363,21 @@
                     </select>
                 </div>
                 <div class="controls-group" id="qr-custom-text-container" style="display: none;">
-                    <label for="qr-custom-text">Custom Text:</label>
-                    <textarea id="qr-custom-text" rows="3" style="width: 100%; background-color: #1f4068; color: #e5e5e5; border-radius: 5px;"></textarea>
+                <label for="qr-custom-text">Custom Text:</label>
+                <textarea id="qr-custom-text" rows="3" style="width: 100%; background-color: #1f4068; color: #e5e5e5; border-radius: 5px;"></textarea>
+                </div>
+                <div class="controls-group" id="qr-exif-container" style="display: none;">
+                    <label for="qr-exif-text">EXIF Summary:</label>
+                    <textarea id="qr-exif-text" rows="7" readonly style="width: 100%; background-color: #1f4068; color: #e5e5e5; border-radius: 5px;"></textarea>
+                    <div>
+                    Include:
+                    <input type="checkbox" id="qr-exif-labels" style="margin: 0 4px;">
+                    <label for="qr-exif-labels" style="display: inline;">Labels</label>
+                    <input type="checkbox" id="qr-exif-gps" style="margin: 0 4px;">
+                    <label for="qr-exif-gps" style="display: inline;">GPS data</label>
+                    <input type="checkbox" id="qr-exif-maps" style="margin: 0 4px;">
+                    <label for="qr-exif-maps" style="display: inline;">gMaps link</label>
+                    </div>
                 </div>
                 <div class="controls-group">
                     <label for="qr-position">Position:</label>

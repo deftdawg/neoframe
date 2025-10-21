@@ -5,7 +5,7 @@ import { getConfig, Config } from './src/config';
 import { adjustContrast, ditherImage, processImageData } from './src/image-processor';
 import { generateQrCode, drawQrCodeOnCanvas } from './src/qr-generator';
 import { applyScaling } from './src/scaling';
-import { getExifData } from './src/exif-reader';
+import { generateQrContent } from './src/qr-content-generator';
 
 async function waitForDevice(ip: string, timeout: number) {
     console.log(`Waiting for device at ${ip} to come online...`);
@@ -103,122 +103,15 @@ async function main() {
 
         if (settings.qrCodeEnabled) {
             console.log('Generating QR code...');
-            let qrContent = '';
-            switch (settings.qrContentType) {
-                case 'url':
-                    qrContent = settings.qrCustomText || 'https://github.com/deftdawg/neoframe';
-                    break;
-                case 'wifi':
-                    qrContent = `WIFI:T:WPA;S:NeoFrame;P:123456789;H:false;`;
-                    break;
-                case 'custom':
-                    qrContent = settings.qrCustomText;
-                    break;
-                case 'exif':
-                    const imageBuffer = readFileSync(imagePathOrUrl);
-                    const exifData = await getExifData(imageBuffer);
-                    console.log('CLI EXIF Data:', JSON.stringify(exifData, null, 2));
-                    let exifString = '';
-                    if (exifData && exifData.tags) {
-                        const allMetaData = exifData.tags;
-                        const make = allMetaData.Make || 'Unknown';
-                        const model = allMetaData.Model || 'Unknown';
-                        let lens = allMetaData.LensModel || allMetaData.LensInfo || 'Unknown';
-                        const focalLength = allMetaData.FocalLength ? parseFloat(allMetaData.FocalLength) : null;
-                        const focalLength35 = allMetaData.FocalLengthIn35mmFilm ? parseInt(allMetaData.FocalLengthIn35mmFilm) : null;
-
-                        function getiPhoneLensCategory(focalLength35: number): string {
-                            if (focalLength35 <= 20) return 'Ultra Wide';
-                            if (focalLength35 < 52) return 'Main';
-                            return 'Telephoto';
-                        }
-                        function getLensCategory(focalLength35: number): string {
-                            if (focalLength35 < 10) return 'Fisheye';
-                            if (focalLength35 <= 24) return 'Ultra Wide';
-                            if (focalLength35 <= 35) return 'Wide';
-                            if (focalLength35 <= 70) return 'Standard';
-                            if (focalLength35 <= 200) return 'Telephoto';
-                            return 'Super Tele';
-                        }
-
-                        if (lens === 'Unknown' && focalLength35) {
-                            lens = (make == "Apple") ? getiPhoneLensCategory(focalLength35): getLensCategory(focalLength35);
-                        }
-                        const exposureTime = allMetaData.ExposureTime ? `1/${Math.round(1 / parseFloat(allMetaData.ExposureTime))}` : null;
-                        const fNumber = allMetaData.FNumber ? parseFloat(allMetaData.FNumber) : null;
-                        const iso = allMetaData.ISOSpeedRatings || null;
-
-                        exifString = `${settings.qrExifLabels ? 'Camera: ' : ''}${make} ${model}\n`;
-                        exifString += `${settings.qrExifLabels ? 'Lens: ' : ''}${lens}`;
-                        exifString += '\n';
-                        if (focalLength) {
-                            exifString += `${settings.qrExifLabels ? 'Focal Length: ' : ''}${focalLength}mm`;
-                            if (focalLength35) exifString += ` (${focalLength35}mm equiv.)`;
-                            exifString += '\n';
-                        }
-                        if (exposureTime && fNumber && iso) {
-                            exifString += `${settings.qrExifLabels ? 'Settings: ' : ''}${exposureTime}s at f/${fNumber}, ISO ${iso}\n`;
-                        }
-
-                        if (settings.qrExifGps) {
-                            const lat = allMetaData.GPSLatitude;
-                            const latRef = allMetaData.GPSLatitudeRef;
-                            const lon = allMetaData.GPSLongitude;
-                            const lonRef = allMetaData.GPSLongitudeRef;
-                            const alt = allMetaData.GPSAltitude;
-                            const altRef = allMetaData.GPSAltitudeRef;
-                            const heading = allMetaData.GPSImgDirection;
-                            const headingRef = allMetaData.GPSImgDirectionRef;
-
-                            if (lat && lon) {
-                                const latDeg = lat[0] + lat[1]/60 + lat[2]/3600;
-                                const latSign = latRef === 'S' ? -1 : 1;
-                                const lonDeg = lon[0] + lon[1]/60 + lon[2]/3600;
-                                const lonSign = lonRef === 'W' ? -1 : 1;
-                                const roundedLat = Math.round((latSign * latDeg) * 100000) / 100000;
-                                const roundedLon = Math.round((lonSign * lonDeg) * 100000) / 100000;
-                                if (settings.qrExifLabels) exifString += 'GPS: ';
-                                exifString += `${roundedLat}, ${roundedLon}`;
-                                if (alt) {
-                                    const altVal = parseFloat(alt);
-                                    const altSign = altRef === 'Below sea level' ? -1 : 1;
-                                    exifString += `, `;
-                                    if (settings.qrExifLabels) exifString += 'Alt: ';
-                                    exifString += `${altSign * Math.round(altVal * 10) / 10}m`;
-                                }
-                                if (heading) {
-                                    const headingVal = parseFloat(heading);
-                                    const roundedHeading = Math.round(headingVal * 10) / 10;
-                                    exifString += `, `;
-                                    if (settings.qrExifLabels) exifString += 'Hdg: ';
-                                    exifString += `${roundedHeading}° ${headingRef || ''}`;
-                                }
-                                exifString += '\n';
-                            }
-                        }
-
-                        if (settings.qrExifMaps) {
-                            const lat = allMetaData.GPSLatitude;
-                            const latRef = allMetaData.GPSLatitudeRef;
-                            const lon = allMetaData.GPSLongitude;
-                            const lonRef = allMetaData.GPSLongitudeRef;
-                            if (lat && lon) {
-                                const latDeg = lat[0] + lat[1]/60 + lat[2]/3600;
-                                const latSign = latRef === 'S' ? -1 : 1;
-                                const lonDeg = lon[0] + lon[1]/60 + lon[2]/3600;
-                                const lonSign = lonRef === 'W' ? -1 : 1;
-                                const roundedLat = Math.round((latSign * latDeg) * 100000) / 100000;
-                                const roundedLon = Math.round((lonSign * lonDeg) * 100000) / 100000;
-                                if (settings.qrExifLabels) exifString += 'gMaps: ';
-                                exifString += `https://google.com/maps?q=${roundedLat},${roundedLon}\n`;
-                            }
-                        }
-                    }
-                    console.log('exifString:', JSON.stringify(exifString));
-                    if (exifString) qrContent = exifString;
-                    console.log('qrContent for exif:', JSON.stringify(qrContent));
-                    break;
-            }
+            const qrContent = await generateQrContent({
+                qrContentType: settings.qrContentType,
+                qrCustomText: settings.qrCustomText,
+                qrExifLabels: settings.qrExifLabels,
+                qrExifGps: settings.qrExifGps,
+                qrExifMaps: settings.qrExifMaps,
+                imagePathOrBuffer: imagePathOrUrl,
+                isBrowser: false
+            });
             if (qrContent && qrContent.trim()) {
                 console.log('Generating QR code for content:', JSON.stringify(qrContent));
                 const qrCanvas = await generateQrCode(qrContent, settings);

@@ -2,6 +2,7 @@ import { getConfig, Config } from './config';
 import { adjustContrast, ditherImage, processImageData } from './algorithms';
 import { generateQrCode, drawQrCodeOnCanvas } from './qr-generator';
 import { applyScaling } from './scaling';
+import { generateQrContent } from './qr-content-generator';
 import { Canvas } from 'canvas';
 
 declare global {
@@ -301,143 +302,45 @@ async function updateImage() {
             ctx.drawImage(offscreenCanvas, 0, 0);
         };
 
-        let qrContent: string | null = null;
-        switch (settings.qrContentType) {
-            case 'url':
-                qrContent = window.location.href;
-                break;
-            case 'wifi':
-                qrContent = `WIFI:T:WPA;S:NeoFrame;P:123456789;H:false;`;
-                break;
-            case 'custom':
-                qrContent = settings.qrCustomText;
-                break;
-            case 'exif':
-                window.EXIF.getData(originalImage as any, function(this: any) {
-                    const allMetaData = window.EXIF.getAllTags(this);
-                    // console.log('EXIF Data:', JSON.stringify(allMetaData, null, 2));
+        const generateQrContentAsync = async () => {
+            const qrContent = await generateQrContent({
+            qrContentType: settings.qrContentType,
+        qrCustomText: settings.qrCustomText,
+        qrExifLabels: settings.qrExifLabels,
+            qrExifGps: settings.qrExifGps,
+        qrExifMaps: settings.qrExifMaps,
+        isBrowser: true,
+            originalImage: originalImage
+        });
 
-                    const hasExif = !!(allMetaData.Make || allMetaData.Model || allMetaData.LensModel || allMetaData.LensInfo || allMetaData.FocalLength || allMetaData.FocalLengthIn35mmFilm || allMetaData.ExposureTime || allMetaData.FNumber || allMetaData.ISOSpeedRatings || allMetaData.GPSLatitude);
-                    if (!hasExif) {
-                        const qrExifText = document.getElementById('qr-exif-text') as HTMLTextAreaElement;
-                        if (qrExifText) qrExifText.value = "No EXIF data found";
-                        (document.getElementById('qr-exif-labels') as HTMLInputElement).disabled = true;
-                        (document.getElementById('qr-exif-gps') as HTMLInputElement).disabled = true;
-                        (document.getElementById('qr-exif-maps') as HTMLInputElement).disabled = true;
-                        // Re-render the preview without QR
-                        const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-                        const ctx = canvas.getContext('2d')!;
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(offscreenCanvas, 0, 0);
-                        return;
-                    }
+        if (settings.qrContentType === 'exif') {
+        const qrExifText = document.getElementById('qr-exif-text') as HTMLTextAreaElement;
+        if (qrExifText) qrExifText.value = qrContent || "No EXIF data found";
 
-                    const make = allMetaData.Make || 'Unknown';
-                    const model = allMetaData.Model || 'Unknown';
-                    let lens = allMetaData.LensModel || allMetaData.LensInfo || 'Unknown';
-                    const focalLength = allMetaData.FocalLength ? parseFloat(allMetaData.FocalLength) : null;
-                    const focalLength35 = allMetaData.FocalLengthIn35mmFilm ? parseInt(allMetaData.FocalLengthIn35mmFilm) : null;
-
-                    function getiPhoneLensCategory(focalLength35: number): string {
-                        console.log('iPhone Focal Length 35mm:', focalLength35);
-                        if (focalLength35 <= 20) return 'Ultra Wide';
-                        if (focalLength35 < 52) return 'Main';
-                        return 'Telephoto';
-                    }
-                    function getLensCategory(focalLength35: number): string {
-                        if (focalLength35 < 10) return 'Fisheye';
-                        if (focalLength35 <= 24) return 'Ultra Wide';
-                        if (focalLength35 <= 35) return 'Wide';
-                        if (focalLength35 <= 70) return 'Standard';
-                        if (focalLength35 <= 200) return 'Telephoto';
-                        return 'Super Tele';
-                    }
-
-                    if (lens === 'Unknown' && focalLength35) {
-                        lens = (make == "Apple") ? getiPhoneLensCategory(focalLength35): getLensCategory(focalLength35);
-                    }
-                    const exposureTime = allMetaData.ExposureTime ? `1/${Math.round(1 / parseFloat(allMetaData.ExposureTime))}` : null;
-                    const fNumber = allMetaData.FNumber ? parseFloat(allMetaData.FNumber) : null;
-                    const iso = allMetaData.ISOSpeedRatings || null;
-
-                    const settings = getSettings();
-                    let exifString = `${settings.qrExifLabels ? 'Camera: ' : ''}${make} ${model}\n`;
-                    exifString += `${settings.qrExifLabels ? 'Lens: ' : ''}${lens}`;
-                    exifString += '\n';
-                    if (focalLength) {
-                        exifString += `${settings.qrExifLabels ? 'Focal Length: ' : ''}${focalLength}mm`;
-                        if (focalLength35) exifString += ` (${focalLength35}mm equiv.)`;
-                        exifString += '\n';
-                    }
-                    if (exposureTime && fNumber && iso) {
-                        exifString += `${settings.qrExifLabels ? 'Settings: ' : ''}${exposureTime}s at f/${fNumber}, ISO ${iso}\n`;
-                    }
-
-                    if (settings.qrExifGps) {
-                        const lat = allMetaData.GPSLatitude;
-                        const latRef = allMetaData.GPSLatitudeRef;
-                        const lon = allMetaData.GPSLongitude;
-                        const lonRef = allMetaData.GPSLongitudeRef;
-                        const alt = allMetaData.GPSAltitude;
-                        const altRef = allMetaData.GPSAltitudeRef;
-                        const heading = allMetaData.GPSImgDirection;
-                        const headingRef = allMetaData.GPSImgDirectionRef;
-
-                        if (lat && lon) {
-                            const latDeg = lat[0] + lat[1]/60 + lat[2]/3600;
-                            const latSign = latRef === 'S' ? -1 : 1;
-                            const lonDeg = lon[0] + lon[1]/60 + lon[2]/3600;
-                            const lonSign = lonRef === 'W' ? -1 : 1;
-                            // Round to nearest 10 feet (~0.000027 degrees, so 5 decimal places)
-                            const roundedLat = Math.round((latSign * latDeg) * 100000) / 100000;
-                            const roundedLon = Math.round((lonSign * lonDeg) * 100000) / 100000;
-                            if (settings.qrExifLabels) exifString += 'GPS: ';
-                            exifString += `${roundedLat}, ${roundedLon}`;
-                            if (alt) {
-                                const altVal = parseFloat(alt);
-                                const altSign = altRef === 'Below sea level' ? -1 : 1;
-                                exifString += `, `;
-                                if (settings.qrExifLabels) exifString += 'Alt: ';
-                                exifString += `${altSign * Math.round(altVal * 10) / 10}m`;
-                            }
-                            if (heading) {
-                                const headingVal = parseFloat(heading);
-                                const roundedHeading = Math.round(headingVal * 10) / 10; // 1 decimal
-                                exifString += `, `;
-                                if (settings.qrExifLabels) exifString += 'Hdg: ';
-                                exifString += `${roundedHeading}° ${headingRef || ''}`;
-                            }
-                            exifString += '\n';
-                        }
-                    }
-
-                    if (settings.qrExifMaps) {
-                        const lat = allMetaData.GPSLatitude;
-                        const latRef = allMetaData.GPSLatitudeRef;
-                        const lon = allMetaData.GPSLongitude;
-                        const lonRef = allMetaData.GPSLongitudeRef;
-                        if (lat && lon) {
-                            const latDeg = lat[0] + lat[1]/60 + lat[2]/3600;
-                            const latSign = latRef === 'S' ? -1 : 1;
-                            const lonDeg = lon[0] + lon[1]/60 + lon[2]/3600;
-                            const lonSign = lonRef === 'W' ? -1 : 1;
-                            const roundedLat = Math.round((latSign * latDeg) * 100000) / 100000;
-                            const roundedLon = Math.round((lonSign * lonDeg) * 100000) / 100000;
-                            if (settings.qrExifLabels) exifString += 'gMaps: ';
-                            exifString += `https://google.com/maps?q=${roundedLat},${roundedLon}\n`; 
-                        }
-                    }
-
-                    const qrExifText = document.getElementById('qr-exif-text') as HTMLTextAreaElement;
-                    if (qrExifText) qrExifText.value = exifString.trim();
-
-                    drawQrAndFinalize(exifString.trim() || "No EXIF data found.");
-                });
-                break;
+        if (!qrContent) {
+                    // No EXIF data found - disable checkboxes and re-render without QR
+        (document.getElementById('qr-exif-labels') as HTMLInputElement).disabled = true;
+        (document.getElementById('qr-exif-gps') as HTMLInputElement).disabled = true;
+        (document.getElementById('qr-exif-maps') as HTMLInputElement).disabled = true;
+        const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+        const ctx = canvas.getContext('2d')!;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(offscreenCanvas, 0, 0);
+        return;
+        } else {
+        // EXIF data found - enable checkboxes
+        (document.getElementById('qr-exif-labels') as HTMLInputElement).disabled = false;
+        (document.getElementById('qr-exif-gps') as HTMLInputElement).disabled = false;
+        (document.getElementById('qr-exif-maps') as HTMLInputElement).disabled = false;
         }
-        if (qrContent !== null) {
-            drawQrAndFinalize(qrContent);
+            }
+
+        if (qrContent) {
+                drawQrAndFinalize(qrContent);
         }
+        };
+
+        await generateQrContentAsync();
     } else {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(offscreenCanvas, 0, 0);
