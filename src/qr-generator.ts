@@ -19,7 +19,7 @@ export async function generateQrCode(content: string, config?: any): Promise<Can
             },
             margin: parseInt(config.qrBorderSize) || 1
         } : {};
-        console.log('QR options:', options);
+        // console.log('QR options:', options);
         if (typeof window !== 'undefined') {
             // Browser
             const canvas = document.createElement('canvas');
