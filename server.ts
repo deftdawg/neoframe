@@ -1,6 +1,7 @@
 import { serve } from "bun";
 import { readFile, writeFile, unlink } from "fs/promises";
 import { join } from "path";
+import { createCanvas } from "canvas";
 
 const MAX_IMAGE_SIZE_MB = 50;
 const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
@@ -147,6 +148,63 @@ async function handleProxy(request: Request): Promise<Response> {
         body = await request.arrayBuffer();
     }
 
+    // Special handling for /upload: capture image_data.bin and convert to PNG
+    if (url.pathname === "/upload" && request.method === "POST" && body) {
+        try {
+            // Create a temporary request to parse form data
+            const tempRequest = new Request('http://dummy', {
+                    method: request.method,
+                    headers: request.headers,
+                    body: body
+                });
+            const formData = await tempRequest.formData();
+            const imageFile = formData.get("data") as File | null;
+            if (imageFile) {
+                const imageBuffer = await imageFile.arrayBuffer();
+                const data = new Uint8Array(imageBuffer);
+                // Assume sixColor format, 1200x1600 pixels, packed 2 pixels per byte (3 bits each)
+                const width = 1200;
+                const height = 1600;
+                const colorMap = [
+                        [0, 0, 0, 255],       // black
+                        [255, 255, 255, 255], // white
+                        [255, 255, 0, 255],   // yellow
+                        [255, 0, 0, 255],     // red
+                        [255, 255, 255, 255], // white (unused)
+                        [0, 0, 255, 255],     // blue
+                        [0, 255, 0, 255],     // green
+                        [255, 255, 255, 255]  // white (unused)
+                    ];
+                const canvas = createCanvas(width, height);
+                const ctx = canvas.getContext('2d');
+                const imageData = ctx.createImageData(width, height);
+                let dataIndex = 0;
+                for (let i = 0; i < data.length; i++) {
+                    const byte = data[i];
+                    const color1 = (byte >> 4) & 0x07;
+                    const color2 = byte & 0x07;
+                    const rgba1 = colorMap[color1];
+                    const rgba2 = colorMap[color2];
+                    imageData.data[dataIndex++] = rgba1[0];
+                    imageData.data[dataIndex++] = rgba1[1];
+                    imageData.data[dataIndex++] = rgba1[2];
+                    imageData.data[dataIndex++] = rgba1[3];
+                    imageData.data[dataIndex++] = rgba2[0];
+                    imageData.data[dataIndex++] = rgba2[1];
+                    imageData.data[dataIndex++] = rgba2[2];
+                    imageData.data[dataIndex++] = rgba2[3];
+                }
+                ctx.putImageData(imageData, 0, 0);
+                const pngBuffer = canvas.toBuffer('image/png');
+                await writeFile(join(process.cwd(), 'dithered_image.png'), pngBuffer);
+            } else {
+                console.error("No data file found in /upload request");
+            }
+        } catch (error) {
+            console.error("Failed to process image_data.bin:", error);
+        }
+    }
+
     try {
         const esp32Response = await fetch(esp32Url, {
             method: request.method,
@@ -179,9 +237,28 @@ serve({
             return handleCli(request);
         }
 
+        if (url.pathname === "/image") {
+            try {
+                const imagePath = join(process.cwd(), 'dithered_image.png');
+                const file = await readFile(imagePath);
+                return new Response(file, {
+                    headers: {
+                        'Content-Type': 'image/png',
+                        'Cache-Control': 'no-cache'
+                    }
+                });
+            } catch (error) {
+                return new Response('Image not found', { status: 404 });
+            }
+        }
+
         // Serve static files for GET/HEAD requests
         if (request.method === "GET" || request.method === "HEAD") {
             const filepath = url.pathname === '/' ? '/neoframe.html' : url.pathname;
+            if (filepath === '/favicon.ico') {
+                // Return 204 No Content for favicon requests to avoid errors
+                return new Response(null, { status: 204 });
+            }
             try {
                 const file = Bun.file(`.${filepath}`);
                 return new Response(file);
