@@ -39,8 +39,14 @@ async function main() {
         waitForOnlineTimeout = parseInt(args[waitForOnlineIndex + 1], 10);
     }
 
+    const ifModifiedSinceIndex = args.indexOf('--if-modified-since');
+    let ifModifiedSince = 0;
+    if (ifModifiedSinceIndex !== -1 && args[ifModifiedSinceIndex + 1]) {
+        ifModifiedSince = parseInt(args[ifModifiedSinceIndex + 1], 10);
+    }
+
     if (!imagePathOrUrl || !configStrOrPath) {
-        console.error('Usage: ./dist/cli.js <path_to_image_or_url> <json_config_string_or_path_to_json> [--wait-for-online <seconds>]');
+        console.error('Usage: ./dist/cli.js <path_to_image_or_url> <json_config_string_or_path_to_json> [--wait-for-online <seconds>] [--if-modified-since <timestamp>]');
         process.exit(1);
     }
 
@@ -60,7 +66,19 @@ async function main() {
 
     try {
         console.log('Loading image...');
-        const image = await loadImage(imagePathOrUrl);
+        let image;
+        if (imagePathOrUrl.startsWith('http')) {
+            const options: any = {};
+            if (ifModifiedSince > 0) {
+                const date = new Date(ifModifiedSince * 1000);
+                options.headers = {
+                    'If-Modified-Since': date.toUTCString()
+                };
+            }
+            image = await loadImage(imagePathOrUrl, options);
+        } else {
+            image = await loadImage(imagePathOrUrl);
+        }
 
         const frameWidth = 1200;
         const frameHeight = 1600;
