@@ -68,14 +68,24 @@ async function main() {
         console.log('Loading image...');
         let image;
         if (imagePathOrUrl.startsWith('http')) {
-            const options: any = {};
+            const fetchOptions: any = {};
             if (ifModifiedSince > 0) {
                 const date = new Date(ifModifiedSince * 1000);
-                options.headers = {
+                fetchOptions.headers = {
                     'If-Modified-Since': date.toUTCString()
                 };
             }
-            image = await loadImage(imagePathOrUrl, options);
+            const response = await fetch(imagePathOrUrl, fetchOptions);
+            if (response.status === 304) {
+                const isoDate = new Date(ifModifiedSince * 1000).toISOString().replace('T', ' ').slice(0, 19);
+                console.log(`Web server reports image as unchanged since ${ifModifiedSince} (${isoDate})`);
+                process.exit(0);
+            }
+            if (!response.ok) {
+                throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+            }
+            const buffer = await response.arrayBuffer();
+            image = await loadImage(Buffer.from(buffer));
         } else {
             image = await loadImage(imagePathOrUrl);
         }
