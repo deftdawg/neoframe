@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, statSync, existsSync } from 'fs';
 import { loadImage, createCanvas, Image } from 'canvas';
 import { getConfig, Config } from './src/config';
 import { adjustContrast, ditherImage, processImageData } from './src/image-processor';
@@ -64,6 +64,23 @@ async function main() {
 
     const settings = getConfig(config);
 
+    // Check for duplicate local image file
+    if (!imagePathOrUrl.startsWith('http')) {
+        const fileStats = statSync(imagePathOrUrl);
+        const currentSize = fileStats.size;
+        const lastFilePath = '/tmp/neoframe.last';
+        if (existsSync(lastFilePath)) {
+            const lastSizeStr = readFileSync(lastFilePath, 'utf-8');
+            const lastSize = parseInt(lastSizeStr, 10);
+            if (lastSize === currentSize) {
+                console.log(`Error: ${imagePathOrUrl} is the same size as the last image sent to the frame (remove /tmp/neoframe.last to resend or provide an image file with a different size)`);
+                process.exit(100);
+            }
+        }
+        // Update the last file with new size
+        writeFileSync(lastFilePath, currentSize.toString());
+    }
+
     try {
         console.log('Loading image...');
         let image;
@@ -79,7 +96,7 @@ async function main() {
             if (response.status === 304) {
                 const isoDate = new Date(ifModifiedSince * 1000).toISOString().replace('T', ' ').slice(0, 19);
                 console.log(`Web server reports image as unchanged since ${ifModifiedSince} (${isoDate})`);
-                process.exit(0);
+                process.exit(100);
             }
             if (!response.ok) {
                 throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
