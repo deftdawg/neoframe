@@ -65,6 +65,7 @@ async function main() {
     const settings = getConfig(config);
 
     // Check for duplicate local image file
+    let shouldUpdateLastFile = false;
     if (!imagePathOrUrl.startsWith('http')) {
         const fileStats = statSync(imagePathOrUrl);
         const currentSize = fileStats.size;
@@ -77,8 +78,7 @@ async function main() {
                 process.exit(100);
             }
         }
-        // Update the last file with new size
-        writeFileSync(lastFilePath, currentSize.toString());
+        shouldUpdateLastFile = true;
     }
 
     try {
@@ -198,9 +198,8 @@ async function main() {
             const responseText = await response.text();
             console.log('Upload response:', responseText);
             console.log('Successfully uploaded image to the frame.');
-        } catch (uploadError) {
-            console.error('An error occurred during upload:', uploadError.message);
-        } finally {
+
+            // Save dithered image
             const outPath = 'dithered_image.png';
             try {
                 writeFileSync(outPath, canvas.toBuffer('image/png'));
@@ -208,6 +207,17 @@ async function main() {
             } catch (saveError) {
                 console.error('Error saving dithered image:', saveError.message);
             }
+
+            // Update last file if needed
+            if (shouldUpdateLastFile) {
+                const fileStats = statSync(imagePathOrUrl);
+                const currentSize = fileStats.size;
+                const lastFilePath = '/tmp/neoframe.last';
+                writeFileSync(lastFilePath, currentSize.toString());
+            }
+        } catch (uploadError) {
+            console.error('An error occurred during upload:', uploadError.message);
+            process.exit(1);
         }
     } catch (error) {
         console.error('An error occurred during image processing:', error.message);
