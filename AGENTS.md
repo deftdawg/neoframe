@@ -29,3 +29,7 @@
 ### QR Codes
 
 - QR Codes need to be placed relative to the orientation of the rotated image (not the physical panel), similarily QR margins need to be from the image as it will be rendered on the target field of view.  So if the Field of View is for the RODALM the QR margins need to be from the edge of what is viewable, not the panel edge
+
+### URL Fetching
+
+- The CLI must support resolving passed-in image URL hostnames using IPv4 first, and the Home Assistant NeoFrame add-on must expose that setting as a default-enabled checkbox for the source image URL.

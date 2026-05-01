@@ -47,6 +47,7 @@ const rgbPalette = [
 function getSettings(): Config {
     return {
         esp32Ip: (document.getElementById('esp32-ip') as HTMLInputElement).value,
+        resolveUrlIpv4First: false,
         ditherMode: (document.getElementById('ditherMode') as HTMLSelectElement).value,
         ditherType: (document.getElementById('ditherType') as HTMLSelectElement).value,
         rotation: (document.getElementById('rotation') as HTMLSelectElement).value,

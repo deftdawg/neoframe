@@ -1,5 +1,6 @@
 export const defaultConfig = {
   esp32Ip: '192.168.4.1',
+  resolveUrlIpv4First: false,
   ditherMode: 'sixColor',
   ditherType: 'floydSteinberg',
   rotation: '0',

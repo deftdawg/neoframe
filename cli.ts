@@ -1,11 +1,67 @@
 #!/usr/bin/env bun
 import { readFileSync, writeFileSync, statSync, existsSync } from 'fs';
+import { setDefaultResultOrder } from 'node:dns';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { loadImage, createCanvas, Image } from 'canvas';
 import { getConfig, Config } from './src/config';
 import { adjustContrast, ditherImage, processImageData } from './src/image-processor';
 import { generateQrCode, drawQrCodeOnCanvas } from './src/qr-generator';
 import { applyScaling } from './src/scaling';
 import { generateQrContent } from './src/qr-content-generator';
+
+function errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : String(error);
+}
+
+function enableIpv4FirstDns() {
+    try {
+        setDefaultResultOrder('ipv4first');
+    } catch (error) {
+        console.warn('Unable to set IPv4-first DNS result ordering:', errorMessage(error));
+    }
+}
+
+async function resolveHttpUrlIpv4First(url: string, headers?: HeadersInit) {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== 'http:' || isIP(parsedUrl.hostname)) {
+        return null;
+    }
+
+    try {
+        const address = await lookup(parsedUrl.hostname, { family: 4 });
+        const hostHeader = parsedUrl.host;
+        parsedUrl.hostname = address.address;
+
+        const resolvedHeaders = new Headers(headers);
+        if (!resolvedHeaders.has('Host')) {
+            resolvedHeaders.set('Host', hostHeader);
+        }
+
+        return { url: parsedUrl.toString(), headers: resolvedHeaders };
+    } catch (error) {
+        console.warn(`Could not resolve ${parsedUrl.hostname} to an IPv4 address, using original URL:`, errorMessage(error));
+        return null;
+    }
+}
+
+async function fetchImageUrl(url: string, options: RequestInit, resolveUrlIpv4First: boolean) {
+    if (!resolveUrlIpv4First) {
+        return fetch(url, options);
+    }
+
+    const resolved = await resolveHttpUrlIpv4First(url, options.headers);
+    if (!resolved) {
+        return fetch(url, options);
+    }
+
+    try {
+        return await fetch(resolved.url, { ...options, headers: resolved.headers });
+    } catch (error) {
+        console.warn(`IPv4 fetch failed for ${url}, retrying original URL:`, errorMessage(error));
+        return fetch(url, options);
+    }
+}
 
 async function waitForDevice(ip: string, timeout: number) {
     console.log(`Waiting for device at ${ip} to come online...`);
@@ -46,7 +102,7 @@ async function main() {
     }
 
     if (!imagePathOrUrl || !configStrOrPath) {
-        console.error('Usage: ./dist/cli.js <path_to_image_or_url> <json_config_string_or_path_to_json> [--wait-for-online <seconds>] [--if-modified-since <timestamp>]');
+        console.error('Usage: ./dist/cli.js <path_to_image_or_url> <json_config_string_or_path_to_json> [--wait-for-online <seconds>] [--if-modified-since <timestamp>] [--resolve-url-ipv4-first]');
         process.exit(1);
     }
 
@@ -63,6 +119,10 @@ async function main() {
     }
 
     const settings = getConfig(config);
+    const resolveUrlIpv4First = settings.resolveUrlIpv4First || args.includes('--resolve-url-ipv4-first');
+    if (resolveUrlIpv4First) {
+        enableIpv4FirstDns();
+    }
 
     // Check for duplicate local image file
     let shouldUpdateLastFile = false;
@@ -92,7 +152,7 @@ async function main() {
                     'If-Modified-Since': date.toUTCString()
                 };
             }
-            const response = await fetch(imagePathOrUrl, fetchOptions);
+            const response = await fetchImageUrl(imagePathOrUrl, fetchOptions, resolveUrlIpv4First);
             if (response.status === 304) {
                 const isoDate = new Date(ifModifiedSince * 1000).toISOString().replace('T', ' ').slice(0, 19);
                 console.log(`Web server reports image as unchanged since ${ifModifiedSince} (${isoDate})`);
