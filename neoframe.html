@@ -301,13 +301,25 @@
                     <option value="threeColor">Three Colors</option>
                 </select>
             </div>
-            <div class="controls-group">
+            <div class="controls-group" id="render-mode-group">
+                <label for="renderMode">Render Mode:</label>
+                <select id="renderMode">
+                    <option value="auto" selected="selected">Auto (Vivid / Graphics)</option>
+                    <option value="vivid">Vivid Photo</option>
+                    <option value="photo">Photo (Balanced)</option>
+                    <option value="graphics">Graphics / UI</option>
+                    <option value="legacy">Legacy</option>
+                </select>
+            </div>
+            <div class="controls-group" id="dither-type-group">
                 <label for="ditherType">Dithering Mode:</label>
                 <select id="ditherType">
                     <option value="floydSteinberg" selected="selected">Floyd-Steinberg</option>
                     <option value="atkinson">Atkinson</option>
                     <option value="stucki">Stucki</option>
                     <option value="jarvis">Jarvis-Judice-Ninke</option>
+                    <option value="ordered">Ordered (Bayer)</option>
+                    <option value="none">None</option>
                 </select>
             </div>
             <div class="controls-group">
@@ -339,9 +351,13 @@
                 <button class="quick-scale" data-scale="100">100%</button>
                 <button class="quick-scale" data-scale="200">200%</button>
             </div>
-            <div class="slider-container">
+            <div class="slider-container" id="dither-strength-container">
                 <label for="ditherStrength">Dither Strength:</label>
                 <input type="range" id="ditherStrength" min="0" max="5" step="0.1" value="1.0">
+            </div>
+            <div class="slider-container" id="ink-saturation-container">
+                <label for="inkSaturation">Ink Saturation:</label>
+                <input type="range" id="inkSaturation" min="0" max="1" step="0.05" value="0.5">
             </div>
             <div class="slider-container">
                 <label for="contrast">Contrast:</label>

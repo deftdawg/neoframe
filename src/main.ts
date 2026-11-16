@@ -1,5 +1,6 @@
 import { getConfig, Config } from './config';
-import { adjustContrast, ditherImage, processImageData } from './algorithms';
+import { rgbPalette, processImageData } from './algorithms';
+import { renderFrameImageData } from './image-processor';
 import { generateQrCode, drawQrCodeOnCanvas } from './qr-generator';
 import { applyScaling } from './scaling';
 import { generateQrContent } from './qr-content-generator';
@@ -35,21 +36,14 @@ function debounce(func: Function, delay: number) {
 
 const debouncedUpdateImage = debounce(updateImage, 2000);
 
-const rgbPalette = [
-    { name: "Yellow", r: 255, g: 255, b: 0, value: 0xe2 },
-    { name: "Green", r: 41, g: 204, b: 20, value: 0x96 },
-    { name: "Blue", r: 0, g: 0, b: 255, value: 0x1d },
-    { name: "Red", r: 255, g: 0, b: 0, value: 0x4c },
-    { name: "Black", r: 0, g: 0, b: 0, value: 0x00 },
-    { name: "White", r: 255, g: 255, b: 255, value: 0xff }
-];
-
 function getSettings(): Config {
-    return {
+    return getConfig({
         esp32Ip: (document.getElementById('esp32-ip') as HTMLInputElement).value,
         resolveUrlIpv4First: false,
         ditherMode: (document.getElementById('ditherMode') as HTMLSelectElement).value,
         ditherType: (document.getElementById('ditherType') as HTMLSelectElement).value,
+        renderMode: (document.getElementById('renderMode') as HTMLSelectElement).value,
+        inkSaturation: (document.getElementById('inkSaturation') as HTMLInputElement).value,
         rotation: (document.getElementById('rotation') as HTMLSelectElement).value,
         scaling: (document.getElementById('scaling') as HTMLSelectElement).value,
         customScale: (document.getElementById('customScale') as HTMLInputElement).value,
@@ -67,7 +61,33 @@ function getSettings(): Config {
         qrExifLabels: (document.getElementById('qr-exif-labels') as HTMLInputElement).checked,
         qrExifGps: (document.getElementById('qr-exif-gps') as HTMLInputElement).checked,
         qrExifMaps: (document.getElementById('qr-exif-maps') as HTMLInputElement).checked
-    };
+    });
+}
+
+function updateRenderModeUI() {
+    const ditherMode = (document.getElementById('ditherMode') as HTMLSelectElement).value;
+    const renderMode = (document.getElementById('renderMode') as HTMLSelectElement).value;
+    const renderModeGroup = document.getElementById('render-mode-group') as HTMLDivElement;
+    const inkSaturationContainer = document.getElementById('ink-saturation-container') as HTMLDivElement;
+    const ditherTypeGroup = document.getElementById('dither-type-group') as HTMLDivElement;
+    const ditherStrengthContainer = document.getElementById('dither-strength-container') as HTMLDivElement;
+
+    const isSixColor = ditherMode === 'sixColor';
+    const isGraphics = isSixColor && renderMode === 'graphics';
+    const usesInkSaturation = isSixColor && (renderMode === 'auto' || renderMode === 'photo' || renderMode === 'graphics');
+
+    if (renderModeGroup) {
+        renderModeGroup.style.display = isSixColor ? 'block' : 'none';
+    }
+    if (inkSaturationContainer) {
+        inkSaturationContainer.style.display = usesInkSaturation ? 'flex' : 'none';
+    }
+    if (ditherTypeGroup) {
+        ditherTypeGroup.style.display = isGraphics ? 'none' : 'block';
+    }
+    if (ditherStrengthContainer) {
+        ditherStrengthContainer.style.display = isGraphics ? 'none' : 'flex';
+    }
 }
 
 function updateScalingUI() {
@@ -90,10 +110,13 @@ function updateScalingUI() {
     customScaleNumberInput.value = customScaleInput.value;
 }
 
-function applySettings(settings: Config) {
+function applySettings(rawSettings: Partial<Config>) {
+    const settings = getConfig(rawSettings);
     (document.getElementById('esp32-ip') as HTMLInputElement).value = settings.esp32Ip;
     (document.getElementById('ditherMode') as HTMLSelectElement).value = settings.ditherMode;
     (document.getElementById('ditherType') as HTMLSelectElement).value = settings.ditherType;
+    (document.getElementById('renderMode') as HTMLSelectElement).value = settings.renderMode;
+    (document.getElementById('inkSaturation') as HTMLInputElement).value = settings.inkSaturation;
     (document.getElementById('rotation') as HTMLSelectElement).value = settings.rotation;
     (document.getElementById('scaling') as HTMLSelectElement).value = settings.scaling;
     (document.getElementById('customScale') as HTMLInputElement).value = settings.customScale;
@@ -120,6 +143,7 @@ function applySettings(settings: Config) {
     const qrExifContainer = document.getElementById('qr-exif-container') as HTMLDivElement;
     qrExifContainer.style.display = settings.qrContentType === 'exif' ? 'block' : 'none';
 
+    updateRenderModeUI();
     updateScalingUI();
     updateImage();
 }
@@ -291,8 +315,7 @@ async function updateImage() {
     }
 
     const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);
-    adjustContrast(imageData, parseFloat(settings.contrast));
-    ditherImage(imageData, settings as Config);
+    renderFrameImageData(imageData, settings, { rotation, imageBoundingBox });
     offscreenCtx.putImageData(imageData, 0, 0);
 
     if (settings.qrCodeEnabled) {
@@ -568,11 +591,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const controlsToMonitor = [
-        'ditherMode', 'ditherType', 'rotation', 'scaling',
-        'ditherStrength', 'contrast', 'qr-code-toggle', 'qr-content-type',
+        'ditherMode', 'ditherType', 'renderMode', 'rotation', 'scaling',
+        'ditherStrength', 'inkSaturation', 'contrast', 'qr-code-toggle', 'qr-content-type',
         'qr-custom-text', 'qr-position', 'qr-margin', 'qr-color', 'qr-background-color', 'qr-border-size',
         'qr-exif-labels', 'qr-exif-gps', 'qr-exif-maps'
     ];
+
+    document.getElementById('ditherMode')?.addEventListener('change', updateRenderModeUI);
+    document.getElementById('renderMode')?.addEventListener('change', updateRenderModeUI);
 
     controlsToMonitor.forEach(id => {
         const element = document.getElementById(id);
@@ -658,6 +684,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Initial UI update
+    updateRenderModeUI();
     updateScalingUI();
 
     const settingsKey = 'neoframeSettings';

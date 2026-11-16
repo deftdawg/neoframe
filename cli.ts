@@ -3,15 +3,47 @@ import { readFileSync, writeFileSync, statSync, existsSync } from 'fs';
 import { setDefaultResultOrder } from 'node:dns';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { loadImage, createCanvas, Image } from 'canvas';
 import { getConfig, Config } from './src/config';
-import { adjustContrast, ditherImage, processImageData } from './src/image-processor';
-import { generateQrCode, drawQrCodeOnCanvas } from './src/qr-generator';
+import { detectContentMode } from './src/algorithms';
+import { renderFrameImageData, processImageData } from './src/image-processor';
 import { applyScaling } from './src/scaling';
 import { generateQrContent } from './src/qr-content-generator';
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
+}
+
+async function ensureCompatibleFontconfig() {
+    if (process.env.FONTCONFIG_FILE || process.platform !== 'linux') return;
+    const guessFamilyConf = '/etc/fonts/conf.d/48-guessfamily.conf';
+    try {
+        if (!existsSync(guessFamilyConf)) return;
+        const contents = readFileSync(guessFamilyConf, 'utf-8');
+        if (!contents.includes('xsi:nil')) return;
+
+        const fallbackConfPath = '/tmp/neoframe-fonts.conf';
+        const fallbackConf = [
+            '<?xml version="1.0"?>',
+            '<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">',
+            '<fontconfig>',
+            '  <dir>/run/current-system/sw/share/X11/fonts</dir>',
+            '  <dir>/usr/share/fonts</dir>',
+            '  <cachedir>/tmp/neoframe-fontcache</cachedir>',
+            '</fontconfig>',
+            '',
+        ].join('\n');
+        writeFileSync(fallbackConfPath, fallbackConf);
+        process.env.FONTCONFIG_FILE = fallbackConfPath;
+
+        // Bun's JS process.env assignments do not always update C environ for native addons like node-canvas.
+        const { dlopen, FFIType } = await import('bun:ffi');
+        const libc = dlopen('libc.so.6', {
+            setenv: { args: [FFIType.cstring, FFIType.cstring, FFIType.i32], returns: FFIType.i32 },
+        });
+        libc.symbols.setenv(Buffer.from('FONTCONFIG_FILE\0'), Buffer.from(`${fallbackConfPath}\0`), 1);
+    } catch {
+        // Ignore fontconfig workaround errors and fall back to system config
+    }
 }
 
 function enableIpv4FirstDns() {
@@ -82,27 +114,175 @@ async function waitForDevice(ip: string, timeout: number) {
     return false;
 }
 
+const VALID_RENDER_MODES = new Set(['auto', 'vivid', 'photo', 'graphics', 'legacy']);
+const VALID_SPLIT_MODES = new Set(['none', 'left-right', 'top-bottom']);
+const VALUE_FLAGS = new Set([
+    '--wait-for-online',
+    '--if-modified-since',
+    '--render-mode',
+    '--split',
+    '--split-mode-a',
+    '--split-mode-b',
+]);
+
+function getFlagValue(args: string[], flag: string): string | undefined {
+    const idx = args.indexOf(flag);
+    if (idx !== -1 && idx + 1 < args.length && !args[idx + 1].startsWith('--')) {
+        return args[idx + 1];
+    }
+    return undefined;
+}
+
+function getPositionalArgs(args: string[]): string[] {
+    const positional: string[] = [];
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (VALUE_FLAGS.has(arg)) {
+            i++;
+            continue;
+        }
+        if (arg.startsWith('--') || arg === '-d') continue;
+        positional.push(arg);
+    }
+    return positional;
+}
+
+function expandDetectTargets(inputs: string[]): string[] {
+    const targets: string[] = [];
+    for (const input of inputs) {
+        if (input.startsWith('http') || existsSync(input) || !/[*?[]/.test(input)) {
+            targets.push(input);
+            continue;
+        }
+        const isAbs = input.startsWith('/');
+        const pattern = isAbs ? input.slice(1) : input;
+        const cwd = isAbs ? '/' : '.';
+        const matches = Array.from(new Bun.Glob(pattern).scanSync({ cwd, followSymlinks: true }))
+            .map((match) => (isAbs ? `/${match}` : match))
+            .sort();
+        targets.push(...(matches.length > 0 ? matches : [input]));
+    }
+    return targets;
+}
+
+async function runDetectMode(
+    inputs: string[],
+    resolveUrlIpv4First: boolean,
+    canvasMod: typeof import('canvas')
+) {
+    const { loadImage, createCanvas } = canvasMod;
+    const targets = expandDetectTargets(inputs);
+    if (targets.length === 0) {
+        console.error('Usage: ./dist/cli.js --detect <image_path_or_url_or_glob...>');
+        process.exit(1);
+    }
+
+    const useColor = !process.env.NO_COLOR;
+    const colorize = (code: string, text: string) => (useColor ? `\x1b[${code}m${text}\x1b[0m` : text);
+    const maxNameLen = Math.max(...targets.map((target) => target.length));
+
+    for (const target of targets) {
+        const paddedName = colorize('1;37', target.padEnd(maxNameLen));
+        try {
+            let image;
+            if (target.startsWith('http')) {
+                const response = await fetchImageUrl(target, {}, resolveUrlIpv4First);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+                }
+                const buffer = await response.arrayBuffer();
+                image = await loadImage(Buffer.from(buffer));
+            } else {
+                image = await loadImage(target);
+            }
+
+            const canvas = createCanvas(image.width, image.height);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(image, 0, 0);
+            const imageData = ctx.getImageData(0, 0, image.width, image.height);
+            const result = detectContentMode(imageData as unknown as ImageData);
+            const isGraphics = result.mode === 'graphics';
+
+            const typeLabel = isGraphics
+                ? colorize('1;36', 'graphic')
+                : colorize('1;32', 'photo  ');
+            const renderModeValue = isGraphics
+                ? colorize('33', result.mode)
+                : colorize('35', result.mode);
+
+            const { flatRatio, uniqueColors, top10Share, smoothGradientRatio } = result.metrics;
+            const flatStr = colorize(flatRatio > 0.55 ? '36' : '32', flatRatio.toFixed(2));
+            const uniqStr = colorize(uniqueColors < 1200 ? '36' : '32', String(uniqueColors));
+            const top10Str = colorize(top10Share > 0.65 ? '36' : '32', top10Share.toFixed(2));
+            const gradStr = colorize(smoothGradientRatio < 0.20 ? '36' : '32', smoothGradientRatio.toFixed(2));
+
+            console.log(
+                `${paddedName}  ${typeLabel}  ` +
+                `${colorize('2', '(renderMode=')}${renderModeValue}` +
+                `${colorize('2', ', flatRatio=')}${flatStr}` +
+                `${colorize('2', ', uniqueColors=')}${uniqStr}` +
+                `${colorize('2', ', top10Share=')}${top10Str}` +
+                `${colorize('2', ', smoothGrad=')}${gradStr}` +
+                `${colorize('2', ')')}`
+            );
+        } catch (error) {
+            console.log(`${paddedName}  ${colorize('1;31', 'error  ')}  ${colorize('31', `(${errorMessage(error)})`)}`);
+        }
+    }
+}
+
+function printUsage() {
+    console.error('Usage:');
+    console.error('  ./dist/cli.js <path_to_image_or_url> <json_config_string_or_path_to_json> [--wait-for-online <seconds>] [--if-modified-since <timestamp>] [--resolve-url-ipv4-first] [--render-mode <auto|vivid|photo|graphics|legacy>] [--split <none|left-right|top-bottom>] [--split-mode-a <mode>] [--split-mode-b <mode>]');
+    console.error('  ./dist/cli.js --detect <image_path_or_url_or_glob...>');
+}
+
 async function main() {
+    await ensureCompatibleFontconfig();
+    const canvasMod = await import('canvas');
+    const { loadImage, createCanvas } = canvasMod;
     const args = process.argv.slice(2);
-    const imagePathOrUrlIndex = args.findIndex(arg => !arg.startsWith('--'));
-    const imagePathOrUrl = args[imagePathOrUrlIndex];
-    const configStrOrPathIndex = args.findIndex(arg => arg.endsWith('.json') || arg.startsWith('{'));
-    const configStrOrPath = args[configStrOrPathIndex];
+    const positionalArgs = getPositionalArgs(args);
 
-    const waitForOnlineIndex = args.indexOf('--wait-for-online');
-    let waitForOnlineTimeout = 0;
-    if (waitForOnlineIndex !== -1 && args[waitForOnlineIndex + 1]) {
-        waitForOnlineTimeout = parseInt(args[waitForOnlineIndex + 1], 10);
+    if (args.includes('--detect') || args.includes('--classify') || args.includes('-d')) {
+        const resolveUrlIpv4First = args.includes('--resolve-url-ipv4-first');
+        if (resolveUrlIpv4First) {
+            enableIpv4FirstDns();
+        }
+        await runDetectMode(positionalArgs, resolveUrlIpv4First, canvasMod);
+        return;
     }
 
-    const ifModifiedSinceIndex = args.indexOf('--if-modified-since');
-    let ifModifiedSince = 0;
-    if (ifModifiedSinceIndex !== -1 && args[ifModifiedSinceIndex + 1]) {
-        ifModifiedSince = parseInt(args[ifModifiedSinceIndex + 1], 10);
-    }
+    const [imagePathOrUrl, configStrOrPath] = positionalArgs;
+
+    const waitForOnlineStr = getFlagValue(args, '--wait-for-online');
+    const waitForOnlineTimeout = waitForOnlineStr ? parseInt(waitForOnlineStr, 10) : 0;
+
+    const ifModifiedSinceStr = getFlagValue(args, '--if-modified-since');
+    const ifModifiedSince = ifModifiedSinceStr ? parseInt(ifModifiedSinceStr, 10) : 0;
+
+    const renderModeFlag = getFlagValue(args, '--render-mode');
+    const splitFlag = getFlagValue(args, '--split');
+    const splitModeAFlag = getFlagValue(args, '--split-mode-a');
+    const splitModeBFlag = getFlagValue(args, '--split-mode-b');
 
     if (!imagePathOrUrl || !configStrOrPath) {
-        console.error('Usage: ./dist/cli.js <path_to_image_or_url> <json_config_string_or_path_to_json> [--wait-for-online <seconds>] [--if-modified-since <timestamp>] [--resolve-url-ipv4-first]');
+        printUsage();
+        process.exit(1);
+    }
+
+    for (const [flag, val] of [
+        ['--render-mode', renderModeFlag],
+        ['--split-mode-a', splitModeAFlag],
+        ['--split-mode-b', splitModeBFlag],
+    ] as const) {
+        if (val !== undefined && !VALID_RENDER_MODES.has(val)) {
+            console.error(`Error: Invalid value "${val}" for ${flag}. Expected one of: auto, vivid, photo, graphics, legacy`);
+            process.exit(1);
+        }
+    }
+    if (splitFlag !== undefined && !VALID_SPLIT_MODES.has(splitFlag)) {
+        console.error(`Error: Invalid value "${splitFlag}" for --split. Expected one of: none, left-right, top-bottom`);
         process.exit(1);
     }
 
@@ -119,6 +299,11 @@ async function main() {
     }
 
     const settings = getConfig(config);
+    if (renderModeFlag) settings.renderMode = renderModeFlag;
+    if (splitModeAFlag) settings.renderMode = splitModeAFlag;
+    if (splitModeBFlag) settings.splitRenderMode = splitModeBFlag;
+    if (splitFlag) settings.splitMode = splitFlag;
+
     const resolveUrlIpv4First = settings.resolveUrlIpv4First || args.includes('--resolve-url-ipv4-first');
     if (resolveUrlIpv4First) {
         enableIpv4FirstDns();
@@ -200,8 +385,11 @@ async function main() {
         const { imageBoundingBox } = applyScaling(sourceImage, offscreenCtx, settings, frameWidth, frameHeight);
 
         const imageData = offscreenCtx.getImageData(0, 0, frameWidth, frameHeight);
-        adjustContrast(imageData, parseFloat(settings.contrast));
-        ditherImage(imageData, settings);
+        renderFrameImageData(imageData, settings, {
+            rotation,
+            imageBoundingBox,
+            onLog: (message) => console.log(message),
+        });
         offscreenCtx.putImageData(imageData, 0, 0);
 
         ctx.drawImage(offscreenCanvas, 0, 0);
@@ -218,6 +406,7 @@ async function main() {
                 isBrowser: false
             });
             if (qrContent && qrContent.trim()) {
+                const { generateQrCode, drawQrCodeOnCanvas } = await import('./src/qr-generator');
                 console.log('Generating QR code for content:', JSON.stringify(qrContent));
                 const qrCanvas = await generateQrCode(qrContent, settings);
                 console.log('QR canvas created, size:', qrCanvas.width, 'x', qrCanvas.height);
