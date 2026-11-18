@@ -115,7 +115,8 @@ async function waitForDevice(ip: string, timeout: number) {
 }
 
 const VALID_RENDER_MODES = new Set(['auto', 'vivid', 'photo', 'graphics', 'legacy']);
-const VALID_SPLIT_MODES = new Set(['none', 'left-right', 'top-bottom']);
+const VALID_SPLIT_C_MODES = new Set(['auto', 'none', 'vivid', 'photo', 'graphics', 'legacy']);
+const VALID_SPLIT_MODES = new Set(['none', 'left-right', 'top-bottom', 'diagonal', 'diagonal-tl-br', 'diagonal-bl-tr']);
 const VALUE_FLAGS = new Set([
     '--wait-for-online',
     '--if-modified-since',
@@ -123,6 +124,7 @@ const VALUE_FLAGS = new Set([
     '--split',
     '--split-mode-a',
     '--split-mode-b',
+    '--split-mode-c',
 ]);
 
 function getFlagValue(args: string[], flag: string): string | undefined {
@@ -233,7 +235,7 @@ async function runDetectMode(
 
 function printUsage() {
     console.error('Usage:');
-    console.error('  ./dist/cli.js <path_to_image_or_url> <json_config_string_or_path_to_json> [--wait-for-online <seconds>] [--if-modified-since <timestamp>] [--resolve-url-ipv4-first] [--render-mode <auto|vivid|photo|graphics|legacy>] [--split <none|left-right|top-bottom>] [--split-mode-a <mode>] [--split-mode-b <mode>]');
+    console.error('  ./dist/cli.js <path_to_image_or_url> <json_config_string_or_path_to_json> [--wait-for-online <seconds>] [--if-modified-since <timestamp>] [--resolve-url-ipv4-first] [--render-mode <auto|vivid|photo|graphics|legacy>] [--split <none|left-right|top-bottom|diagonal|diagonal-tl-br|diagonal-bl-tr>] [--split-mode-a <mode>] [--split-mode-b <mode>] [--split-mode-c <auto|none|mode>]');
     console.error('  ./dist/cli.js --detect <image_path_or_url_or_glob...>');
 }
 
@@ -265,6 +267,7 @@ async function main() {
     const splitFlag = getFlagValue(args, '--split');
     const splitModeAFlag = getFlagValue(args, '--split-mode-a');
     const splitModeBFlag = getFlagValue(args, '--split-mode-b');
+    const splitModeCFlag = getFlagValue(args, '--split-mode-c');
 
     if (!imagePathOrUrl || !configStrOrPath) {
         printUsage();
@@ -281,8 +284,12 @@ async function main() {
             process.exit(1);
         }
     }
+    if (splitModeCFlag !== undefined && !VALID_SPLIT_C_MODES.has(splitModeCFlag)) {
+        console.error(`Error: Invalid value "${splitModeCFlag}" for --split-mode-c. Expected one of: auto, none, vivid, photo, graphics, legacy`);
+        process.exit(1);
+    }
     if (splitFlag !== undefined && !VALID_SPLIT_MODES.has(splitFlag)) {
-        console.error(`Error: Invalid value "${splitFlag}" for --split. Expected one of: none, left-right, top-bottom`);
+        console.error(`Error: Invalid value "${splitFlag}" for --split. Expected one of: none, left-right, top-bottom, diagonal, diagonal-tl-br, diagonal-bl-tr`);
         process.exit(1);
     }
 
@@ -302,6 +309,7 @@ async function main() {
     if (renderModeFlag) settings.renderMode = renderModeFlag;
     if (splitModeAFlag) settings.renderMode = splitModeAFlag;
     if (splitModeBFlag) settings.splitRenderMode = splitModeBFlag;
+    if (splitModeCFlag) settings.splitRenderModeC = splitModeCFlag;
     if (splitFlag) settings.splitMode = splitFlag;
 
     const resolveUrlIpv4First = settings.resolveUrlIpv4First || args.includes('--resolve-url-ipv4-first');

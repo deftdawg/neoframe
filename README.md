@@ -6,7 +6,7 @@ Adds:
 - scaling
 - Spectra 6 rendering modes (`auto`, `vivid`, `photo`, `graphics`, `legacy`) with automatic photo/UI detection and measured-ink calibration
 - batch/single CLI content detection mode (`--detect` / `--classify` / `-d <image_or_glob...>`) to check whether `auto` classifies images as `graphic` or `photo`
-- seamless CLI A/B split rendering (`--split left-right|top-bottom` with `--split-mode-a` / `--split-mode-b`)
+- seamless CLI 2-way (graphics vs legacy) and 3-way (vivid vs photo vs legacy) split rendering (`--split left-right|top-bottom|diagonal|diagonal-bl-tr` with `--split-mode-a` / `--split-mode-b` / `--split-mode-c`) and edge method labels
 - QR code overlays
 - 8x10 Ikea RODALM frame fit
 - cli mode via `cli.ts` (provide image filename/url + settings from browser UI)

@@ -6,7 +6,10 @@ import {
     renderSpectra6Image,
     RgbTuple,
 } from './algorithms';
-import { renderFrameImageData } from './image-processor';
+import {
+    renderFrameImageData,
+    getSegmentIndex,
+} from './image-processor';
 
 function makeImageData(width: number, height: number, fill: RgbTuple = [255, 255, 255]): ImageData {
     const data = new Uint8ClampedArray(width * height * 4);
@@ -228,4 +231,127 @@ test('renderFrameImageData performs seamless orientation-aware A/B split within 
     renderFrameImageData(split270LR, cfg, { rotation: 270, imageBoundingBox: bounds });
     expect(getPixel(split270LR, 25, 30)).toEqual(getPixel(refA, 25, 30));
     expect(getPixel(split270LR, 25, 29)).toEqual(getPixel(refB, 25, 29));
+});
+
+test('auto split uses 2-way graphics vs legacy on UI graphics and 3-way vivid vs photo vs legacy on photos', () => {
+    const graphicLogs: string[] = [];
+    const graphic = makeWeatherLikeGraphic(240, 180);
+    renderFrameImageData(
+        graphic,
+        getConfig({ renderMode: 'auto', splitMode: 'left-right', splitRenderMode: 'auto', contrast: '1.0' }),
+        { onLog: (msg) => graphicLogs.push(msg) }
+    );
+    expect(graphicLogs.some((l) => l.includes('Split rendering (left-right): Side A=graphics') && l.includes('Side B=legacy') && !l.includes('Side C='))).toBe(true);
+
+    const photoLogs: string[] = [];
+    const photo = makeContinuousPhoto(240, 240);
+    renderFrameImageData(
+        photo,
+        getConfig({ renderMode: 'auto', splitMode: 'left-right', splitRenderMode: 'auto', contrast: '1.0' }),
+        { onLog: (msg) => photoLogs.push(msg) }
+    );
+    expect(photoLogs.some((l) =>
+        l.includes('Split rendering (left-right): Side A=vivid') &&
+        l.includes('Side B=photo') &&
+        l.includes('Side C=legacy')
+    )).toBe(true);
+
+    // Confirm 3-way horizontal partition matches vivid / photo / legacy references in interior of each third.
+    const refPhoto = makeContinuousPhoto(240, 240);
+    const vividRef = makeContinuousPhoto(240, 240);
+    const photoRef = makeContinuousPhoto(240, 240);
+    const legacyRef = makeContinuousPhoto(240, 240);
+    const cfg = getConfig({ renderMode: 'vivid', splitMode: 'left-right', splitRenderMode: 'photo', splitRenderModeC: 'legacy', contrast: '1.0', ditherType: 'none' });
+    renderSpectra6Image(vividRef, cfg, 'vivid');
+    renderSpectra6Image(photoRef, cfg, 'photo');
+    renderSpectra6Image(legacyRef, cfg, 'legacy');
+    renderFrameImageData(refPhoto, cfg);
+
+    expect(getPixel(refPhoto, 40, 120)).toEqual(getPixel(vividRef, 40, 120));
+    expect(getPixel(refPhoto, 120, 120)).toEqual(getPixel(photoRef, 120, 120));
+    expect(getPixel(refPhoto, 200, 120)).toEqual(getPixel(legacyRef, 200, 120));
+});
+
+test('diagonal and diagonal-bl-tr split modes partition 2-way and 3-way segments across rotations', () => {
+    expect(getSegmentIndex(0.1, 0.1, 2, 'diagonal')).toBe(0);
+    expect(getSegmentIndex(0.9, 0.9, 2, 'diagonal')).toBe(1);
+    expect(getSegmentIndex(0.1, 0.9, 2, 'diagonal-bl-tr')).toBe(0);
+    expect(getSegmentIndex(0.9, 0.1, 2, 'diagonal-bl-tr')).toBe(1);
+
+    expect(getSegmentIndex(0.1, 0.1, 3, 'diagonal')).toBe(0);
+    expect(getSegmentIndex(0.5, 0.5, 3, 'diagonal')).toBe(1);
+    expect(getSegmentIndex(0.9, 0.9, 3, 'diagonal')).toBe(2);
+
+    // Rotation 90 diagonal-tl-br on 300x300 canvas: (u,v) = (ry, 1-rx)
+    const img = makeContinuousPhoto(300, 300);
+    const vividRef = makeContinuousPhoto(300, 300);
+    const photoRef = makeContinuousPhoto(300, 300);
+    const legacyRef = makeContinuousPhoto(300, 300);
+    const cfg = getConfig({
+        renderMode: 'vivid',
+        splitMode: 'diagonal',
+        splitRenderMode: 'photo',
+        splitRenderModeC: 'legacy',
+        contrast: '1.0',
+        ditherType: 'none',
+    });
+    renderSpectra6Image(vividRef, cfg, 'vivid');
+    renderSpectra6Image(photoRef, cfg, 'photo');
+    renderSpectra6Image(legacyRef, cfg, 'legacy');
+    renderFrameImageData(img, cfg, { rotation: 90 });
+
+    // For rotation=90: u = (y+0.5)/300, v = 1 - (x+0.5)/300
+    // (270, 30) -> u=0.1, v=0.1 => segment 0 (vivid)
+    // (150, 150) -> u=0.5, v=0.5 => segment 1 (photo)
+    // (30, 270) -> u=0.9, v=0.9 => segment 2 (legacy)
+    expect(getPixel(img, 270, 30)).toEqual(getPixel(vividRef, 270, 30));
+    expect(getPixel(img, 150, 150)).toEqual(getPixel(photoRef, 150, 150));
+    expect(getPixel(img, 30, 270)).toEqual(getPixel(legacyRef, 30, 270));
+});
+
+test('split rendering draws black-and-white method labels along each segment longest edge', () => {
+    // 300x400 portrait canvas, left-right 2-way split -> longest edges are left (400px) and right (400px)
+    const img = makeImageData(300, 400, [150, 190, 230]);
+    const cfg = getConfig({
+        renderMode: 'graphics',
+        splitMode: 'left-right',
+        splitRenderMode: 'legacy',
+        contrast: '1.0',
+        ditherType: 'none',
+    });
+    renderFrameImageData(img, cfg, { rotation: 0 });
+
+    // Pill along left edge centered vertically (y around 200), x in [0..19], must contain pure black & white border/text pixels
+    let leftHasBlack = false;
+    let leftHasWhite = false;
+    for (let y = 140; y < 260; y++) {
+        for (let x = 0; x < 20; x++) {
+            const px = getPixel(img, x, y);
+            expect(
+                (px[0] === 0 && px[1] === 0 && px[2] === 0) ||
+                (px[0] === 255 && px[1] === 255 && px[2] === 255) ||
+                (px[0] === 0 && px[1] === 0 && px[2] === 255)
+            ).toBe(true);
+            if (px[0] === 0 && px[1] === 0 && px[2] === 0) leftHasBlack = true;
+            if (px[0] === 255 && px[1] === 255 && px[2] === 255) leftHasWhite = true;
+        }
+    }
+    expect(leftHasBlack).toBe(true);
+    expect(leftHasWhite).toBe(true);
+
+    // Top edge at (x=0, y=0) on left-right split stays untouched by label pill (pill centered at y=200)
+    expect(getPixel(img, 0, 0)).toEqual([0, 0, 255]);
+
+    // Pill border at right edge centered vertically (x=299, y=200) should be pure black border or white interior
+    const rightEdgePx = getPixel(img, 299, 200);
+    expect(
+        (rightEdgePx[0] === 0 && rightEdgePx[1] === 0 && rightEdgePx[2] === 0) ||
+        (rightEdgePx[0] === 255 && rightEdgePx[1] === 255 && rightEdgePx[2] === 255)
+    ).toBe(true);
+
+    // Wide 400x300 canvas with top-bottom split -> longest edges are top and bottom
+    const wide = makeImageData(400, 300, [150, 190, 230]);
+    renderFrameImageData(wide, { ...cfg, splitMode: 'top-bottom' }, { rotation: 0 });
+    expect(getPixel(wide, 200, 0)).toEqual([0, 0, 0]); // top border of centered pill on top edge
+    expect(getPixel(wide, 200, 299)).toEqual([0, 0, 0]); // bottom border of centered pill on bottom edge
 });
