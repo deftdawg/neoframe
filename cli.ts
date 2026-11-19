@@ -203,20 +203,23 @@ async function runDetectMode(
             ctx.drawImage(image, 0, 0);
             const imageData = ctx.getImageData(0, 0, image.width, image.height);
             const result = detectContentMode(imageData as unknown as ImageData);
-            const isGraphics = result.mode === 'graphics';
+            const isPhotoContent = result.mode === 'vivid';
 
-            const typeLabel = isGraphics
-                ? colorize('1;36', 'graphic')
-                : colorize('1;32', 'photo  ');
-            const renderModeValue = isGraphics
+            const typeLabel = isPhotoContent
+                ? colorize('1;32', 'photo  ')
+                : colorize('1;36', 'graphic');
+            const renderModeValue = result.mode === 'graphics'
                 ? colorize('33', result.mode)
-                : colorize('35', result.mode);
+                : result.mode === 'photo'
+                  ? colorize('36', result.mode)
+                  : colorize('35', result.mode);
 
-            const { flatRatio, uniqueColors, top10Share, smoothGradientRatio } = result.metrics;
+            const { flatRatio, uniqueColors, top10Share, smoothGradientRatio, subtleDarkEdgeShare } = result.metrics;
             const flatStr = colorize(flatRatio > 0.55 ? '36' : '32', flatRatio.toFixed(2));
             const uniqStr = colorize(uniqueColors < 1200 ? '36' : '32', String(uniqueColors));
             const top10Str = colorize(top10Share > 0.65 ? '36' : '32', top10Share.toFixed(2));
             const gradStr = colorize(smoothGradientRatio < 0.20 ? '36' : '32', smoothGradientRatio.toFixed(2));
+            const darkStr = colorize(subtleDarkEdgeShare > 0.40 ? '36' : '2', subtleDarkEdgeShare.toFixed(2));
 
             console.log(
                 `${paddedName}  ${typeLabel}  ` +
@@ -225,6 +228,7 @@ async function runDetectMode(
                 `${colorize('2', ', uniqueColors=')}${uniqStr}` +
                 `${colorize('2', ', top10Share=')}${top10Str}` +
                 `${colorize('2', ', smoothGrad=')}${gradStr}` +
+                `${colorize('2', ', subtleDarkEdges=')}${darkStr}` +
                 `${colorize('2', ')')}`
             );
         } catch (error) {

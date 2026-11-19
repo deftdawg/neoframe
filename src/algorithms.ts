@@ -14,10 +14,11 @@ export interface ContentDetectionMetrics {
     uniqueColors: number;
     top10Share: number;
     smoothGradientRatio: number;
+    subtleDarkEdgeShare: number;
 }
 
 export interface ContentDetectionResult {
-    mode: 'vivid' | 'graphics';
+    mode: 'vivid' | 'photo' | 'graphics';
     metrics: ContentDetectionMetrics;
 }
 
@@ -457,8 +458,10 @@ export function adaptColours(
     }
     const darkness = totalInv > 0 ? weightedDarkness / totalInv : 0;
 
+    // Attenuate darkening for already-dark colors so dark-mode UI contrast is not crushed.
+    const darkGuard = Math.min(1, Math.max(0, (v - 0.3) / 0.4));
     const newS = Math.min(1, s * (1 + (boost - 1) * weight));
-    const newV = Math.max(0, Math.min(1, v * (1 - strength * darkness * weight * 1.6)));
+    const newV = Math.max(0, Math.min(1, v * (1 - strength * darkness * weight * darkGuard * 1.6)));
     return hsvToRgb(h, newS, newV);
 }
 
@@ -497,6 +500,10 @@ export function orderedBayerDither(
     neutralChroma = 24
 ): Uint8Array {
     const indices = new Uint8Array(width * height);
+    const white = quantPalette[WHITE_INDEX];
+    // For neutral pixels (Black/White only), use the full Black-to-White palette range so
+    // dark/light greys outside snapToPalette's threshold do not fall into a dead zone.
+    const neutralSpread = white ? (white[0] + white[1] + white[2]) / 3 : spread;
 
     for (let y = 0; y < height; y++) {
         const bayerRow = BAYER8[y & 7];
@@ -509,7 +516,7 @@ export function orderedBayerDither(
 
             const chroma = Math.max(r, g, b) - Math.min(r, g, b);
             const isNeutral = neutralChroma > 0 && chroma < neutralChroma;
-            const offset = bayerRow[x & 7] * spread;
+            const offset = bayerRow[x & 7] * (isNeutral ? neutralSpread : spread);
 
             const sr = r + offset;
             const sg = g + offset;
@@ -579,7 +586,7 @@ export function sharpenEdges(
                 }
             }
 
-            if (maxL - minL > edgeRange) {
+            if (maxL - minL > edgeRange && maxL >= textThreshold) {
                 indices[p] = luma[p] < textThreshold ? 0 : 1;
             }
         }
@@ -652,6 +659,8 @@ export function detectContentMode(
     let flatCount = 0;
     let smoothGradCount = 0;
     let neighborPairs = 0;
+    let totalEdges = 0;
+    let subtleDarkEdges = 0;
 
     const maxX = bx + bw;
     const maxY = by + bh;
@@ -680,16 +689,35 @@ export function detectContentMode(
                 } else if (maxDelta > 3 && maxDelta < 24) {
                     smoothGradCount++;
                 }
+
+                if (maxDelta >= 18) {
+                    totalEdges++;
+                    const l0 = 0.299 * r + 0.587 * g + 0.114 * b;
+                    const lR = 0.299 * data[idxR] + 0.587 * data[idxR + 1] + 0.114 * data[idxR + 2];
+                    const lD = 0.299 * data[idxD] + 0.587 * data[idxD + 1] + 0.114 * data[idxD + 2];
+                    const maxL = Math.max(l0, lR, lD);
+                    const minL = Math.min(l0, lR, lD);
+                    const dL = maxL - minL;
+                    if (maxL < 125 && dL >= 12 && dL <= 75) {
+                        subtleDarkEdges++;
+                    }
+                }
             }
         }
     }
 
     let uniqueColors = 0;
+    let domBucket = 0;
+    let domCount = 0;
     const top10: number[] = [];
     for (let i = 0; i < hist.length; i++) {
         const count = hist[i];
         if (count > 0) {
             uniqueColors++;
+            if (count > domCount) {
+                domCount = count;
+                domBucket = i;
+            }
             if (top10.length < 10) {
                 top10.push(count);
                 if (top10.length === 10) top10.sort((a, b) => b - a);
@@ -704,6 +732,13 @@ export function detectContentMode(
     const flatRatio = neighborPairs > 0 ? flatCount / neighborPairs : 0;
     const smoothGradientRatio = neighborPairs > 0 ? smoothGradCount / neighborPairs : 0;
     const top10Share = sampleCount > 0 ? top10Sum / sampleCount : 0;
+    const subtleDarkEdgeShare = totalEdges > 0 ? subtleDarkEdges / totalEdges : 0;
+
+    const domR = ((domBucket >> 10) & 31) * 8 + 4;
+    const domG = ((domBucket >> 5) & 31) * 8 + 4;
+    const domB = (domBucket & 31) * 8 + 4;
+    const dominantBgLuma = 0.299 * domR + 0.587 * domG + 0.114 * domB;
+    const dominantBgShare = sampleCount > 0 ? domCount / sampleCount : 0;
 
     const isFlat = flatRatio > 0.55;
     const isLowDiversity = uniqueColors < 1200 || top10Share > 0.65;
@@ -711,7 +746,18 @@ export function detectContentMode(
 
     const score = (isFlat ? 1 : 0) + (isLowDiversity ? 1 : 0) + (isBimodalEdges ? 1 : 0);
     const requiredScore = options?.hasCameraExif ? 3 : 2;
-    const mode = score >= requiredScore ? 'graphics' : 'vivid';
+    const isGraphics = score >= requiredScore;
+    const hasSubtleDarkDetail =
+        isGraphics &&
+        dominantBgLuma < 90 &&
+        dominantBgShare > 0.50 &&
+        totalEdges >= 30 &&
+        subtleDarkEdgeShare > 0.40;
+    const mode: 'vivid' | 'photo' | 'graphics' = hasSubtleDarkDetail
+        ? 'photo'
+        : isGraphics
+          ? 'graphics'
+          : 'vivid';
 
     return {
         mode,
@@ -720,6 +766,7 @@ export function detectContentMode(
             uniqueColors,
             top10Share,
             smoothGradientRatio,
+            subtleDarkEdgeShare,
         },
     };
 }

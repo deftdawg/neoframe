@@ -355,3 +355,78 @@ test('split rendering draws black-and-white method labels along each segment lon
     expect(getPixel(wide, 200, 0)).toEqual([0, 0, 0]); // top border of centered pill on top edge
     expect(getPixel(wide, 200, 299)).toEqual([0, 0, 0]); // bottom border of centered pill on bottom edge
 });
+
+function makeWordClockGraphic(bg: RgbTuple, alpha = 50, width = 120, height = 120): ImageData {
+    const img = makeImageData(width, height, bg);
+    const dim: RgbTuple = [
+        Math.round(bg[0] * ((255 - alpha) / 255) + 255 * (alpha / 255)),
+        Math.round(bg[1] * ((255 - alpha) / 255) + 255 * (alpha / 255)),
+        Math.round(bg[2] * ((255 - alpha) / 255) + 255 * (alpha / 255)),
+    ];
+    for (let gy = 0; gy < 8; gy++) {
+        for (let gx = 0; gx < 8; gx++) {
+            const isActive = gy === 0 && gx < 2;
+            const color: RgbTuple = isActive ? [255, 255, 255] : dim;
+            const x0 = 6 + gx * 14;
+            const y0 = 6 + gy * 14;
+            for (let dy = 0; dy < 8; dy++) {
+                for (let dx = 0; dx < 6; dx++) {
+                    setPixel(img, x0 + dx, y0 + dy, color);
+                }
+            }
+        }
+    }
+    return img;
+}
+
+test('graphics mode preserves dim neutral text on dark backgrounds instead of crushing it to black', () => {
+    const img = makeImageData(64, 32, [0, 0, 0]);
+    // Dim text block (50,50,50) simulating Word Clock inactive letters (alpha 50/255)
+    for (let y = 8; y < 24; y++) {
+        for (let x = 8; x < 56; x++) {
+            setPixel(img, x, y, [50, 50, 50]);
+        }
+    }
+
+    renderSpectra6Image(img, getConfig({ renderMode: 'graphics', contrast: '1.2' }), 'graphics');
+
+    // Pure black background stays solid black
+    for (let x = 0; x < 64; x++) {
+        expect(getPixel(img, x, 0)).toEqual([0, 0, 0]);
+    }
+
+    // Dim text block must retain visible white dither dots (not erased to 0%)
+    let whiteCount = 0;
+    const totalDim = 16 * 48;
+    for (let y = 8; y < 24; y++) {
+        for (let x = 8; x < 56; x++) {
+            const px = getPixel(img, x, y);
+            if (px[0] === 255 && px[1] === 255 && px[2] === 255) whiteCount++;
+        }
+    }
+    expect(whiteCount / totalDim).toBeGreaterThan(0.10);
+});
+
+test('detectContentMode selects photo for dark low-contrast graphics like Word Clock, but graphics for high-contrast dark UI', () => {
+    const blackWordClock = makeWordClockGraphic([0, 0, 0], 50);
+    const blackResult = detectContentMode(blackWordClock);
+    expect(blackResult.mode).toBe('photo');
+    expect(blackResult.metrics.subtleDarkEdgeShare).toBeGreaterThan(0.4);
+
+    const navyWordClock = makeWordClockGraphic([40, 55, 90], 50);
+    const navyResult = detectContentMode(navyWordClock);
+    expect(navyResult.mode).toBe('photo');
+    expect(navyResult.metrics.subtleDarkEdgeShare).toBeGreaterThan(0.4);
+
+    // Dark UI with high-contrast bright text (like transit board) should stay graphics
+    const darkDashboard = makeImageData(120, 120, [0, 0, 0]);
+    for (let row = 0; row < 6; row++) {
+        for (let y = 10 + row * 18; y < 18 + row * 18; y++) {
+            for (let x = 10; x < 110; x++) {
+                setPixel(darkDashboard, x, y, [255, 255, 255]);
+            }
+        }
+    }
+    const darkDashResult = detectContentMode(darkDashboard);
+    expect(darkDashResult.mode).toBe('graphics');
+});
