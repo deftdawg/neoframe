@@ -407,26 +407,57 @@ test('graphics mode preserves dim neutral text on dark backgrounds instead of cr
     expect(whiteCount / totalDim).toBeGreaterThan(0.10);
 });
 
-test('detectContentMode selects photo for dark low-contrast graphics like Word Clock, but graphics for high-contrast dark UI', () => {
-    const blackWordClock = makeWordClockGraphic([0, 0, 0], 50);
-    const blackResult = detectContentMode(blackWordClock);
-    expect(blackResult.mode).toBe('photo');
-    expect(blackResult.metrics.subtleDarkEdgeShare).toBeGreaterThan(0.4);
+test('graphics mode keeps faint letters legible on a coloured background (word clocks)', () => {
+    const navy: RgbTuple = [40, 60, 120];
+    const dim: RgbTuple = [81, 98, 146];
+    const img = makeImageData(80, 40, navy);
 
-    const navyWordClock = makeWordClockGraphic([40, 55, 90], 50);
-    const navyResult = detectContentMode(navyWordClock);
-    expect(navyResult.mode).toBe('photo');
-    expect(navyResult.metrics.subtleDarkEdgeShare).toBeGreaterThan(0.4);
-
-    // Dark UI with high-contrast bright text (like transit board) should stay graphics
-    const darkDashboard = makeImageData(120, 120, [0, 0, 0]);
-    for (let row = 0; row < 6; row++) {
-        for (let y = 10 + row * 18; y < 18 + row * 18; y++) {
-            for (let x = 10; x < 110; x++) {
-                setPixel(darkDashboard, x, y, [255, 255, 255]);
+    for (let y = 14; y < 26; y++) {
+        for (let x = 20; x < 60; x++) {
+            if (Math.floor(x / 5) % 2 === 0) {
+                setPixel(img, x, y, dim);
             }
         }
     }
-    const darkDashResult = detectContentMode(darkDashboard);
-    expect(darkDashResult.mode).toBe('graphics');
+
+    renderSpectra6Image(img, getConfig({ renderMode: 'graphics', contrast: '1.0' }), 'graphics');
+
+    const perceivedLuma = (px: RgbTuple): number => {
+        const idx = SPECTRA6_PALETTE.display.findIndex(
+            (c) => c[0] === px[0] && c[1] === px[1] && c[2] === px[2]
+        );
+        const m = SPECTRA6_PALETTE.measured[idx >= 0 ? idx : 0];
+        const w = SPECTRA6_PALETTE.measured[1];
+        const r = (m[0] / w[0]) * 255;
+        const g = (m[1] / w[1]) * 255;
+        const b = (m[2] / w[2]) * 255;
+        return 0.299 * r + 0.587 * g + 0.114 * b;
+    };
+
+    let letterSum = 0;
+    let letterCount = 0;
+    let bgSum = 0;
+    let bgCount = 0;
+    for (let y = 0; y < 40; y++) {
+        for (let x = 0; x < 80; x++) {
+            const l = perceivedLuma(getPixel(img, x, y));
+            if (y < 8) {
+                bgSum += l;
+                bgCount++;
+            } else if (y >= 14 && y < 26 && x >= 20 && x < 60 && Math.floor(x / 5) % 2 === 0) {
+                letterSum += l;
+                letterCount++;
+            }
+        }
+    }
+
+    expect(letterSum / letterCount - bgSum / bgCount).toBeGreaterThan(25);
+});
+
+test('detectContentMode classifies dark Word Clock graphics as graphics', () => {
+    const blackWordClock = makeWordClockGraphic([0, 0, 0], 50);
+    expect(detectContentMode(blackWordClock).mode).toBe('graphics');
+
+    const navyWordClock = makeWordClockGraphic([40, 55, 90], 50);
+    expect(detectContentMode(navyWordClock).mode).toBe('graphics');
 });

@@ -101,7 +101,7 @@ function isExplicitSpectraMode(mode: string): mode is ResolvedSpectraMode {
 
 function resolveSplitSegments(
     config: Config,
-    resolveDetected: () => 'vivid' | 'photo' | 'graphics'
+    resolveDetected: () => 'vivid' | 'graphics'
 ): SplitSegment[] {
     const rawA = normalizeRenderMode(config.renderMode, 'auto');
     const rawB = normalizeRenderMode(config.splitRenderMode, 'auto');
@@ -350,8 +350,8 @@ export function renderFrameImageData(
 
     const splitMode = normalizeSplitMode(config.splitMode);
 
-    let detectedMode: 'vivid' | 'photo' | 'graphics' | null = null;
-    const resolveDetected = (): 'vivid' | 'photo' | 'graphics' => {
+    let detectedMode: 'vivid' | 'graphics' | null = null;
+    const resolveDetected = (): 'vivid' | 'graphics' => {
         if (!detectedMode) {
             const detection = detectContentMode(imageData, options.imageBoundingBox, {
                 hasCameraExif: options.hasCameraExif,
@@ -362,8 +362,7 @@ export function renderFrameImageData(
                 `(flatRatio=${detection.metrics.flatRatio.toFixed(2)}, ` +
                 `uniqueColors=${detection.metrics.uniqueColors}, ` +
                 `top10Share=${detection.metrics.top10Share.toFixed(2)}, ` +
-                `smoothGrad=${detection.metrics.smoothGradientRatio.toFixed(2)}, ` +
-                `subtleDarkEdges=${detection.metrics.subtleDarkEdgeShare.toFixed(2)})`
+                `smoothGrad=${detection.metrics.smoothGradientRatio.toFixed(2)})`
             );
         }
         return detectedMode;

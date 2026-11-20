@@ -14,11 +14,10 @@ export interface ContentDetectionMetrics {
     uniqueColors: number;
     top10Share: number;
     smoothGradientRatio: number;
-    subtleDarkEdgeShare: number;
 }
 
 export interface ContentDetectionResult {
-    mode: 'vivid' | 'photo' | 'graphics';
+    mode: 'vivid' | 'graphics';
     metrics: ContentDetectionMetrics;
 }
 
@@ -595,6 +594,169 @@ export function sharpenEdges(
     return indices;
 }
 
+function separableMinMax1D(
+    src: Float32Array,
+    width: number,
+    height: number,
+    radius: number,
+    isMax: boolean
+): Float32Array {
+    const temp = new Float32Array(src.length);
+    const dst = new Float32Array(src.length);
+
+    // Horizontal pass
+    for (let y = 0; y < height; y++) {
+        const row = y * width;
+        for (let x = 0; x < width; x++) {
+            const x0 = x > radius ? x - radius : 0;
+            const x1 = x + radius < width ? x + radius : width - 1;
+            let acc = src[row + x0];
+            if (isMax) {
+                for (let k = x0 + 1; k <= x1; k++) {
+                    const v = src[row + k];
+                    if (v > acc) acc = v;
+                }
+            } else {
+                for (let k = x0 + 1; k <= x1; k++) {
+                    const v = src[row + k];
+                    if (v < acc) acc = v;
+                }
+            }
+            temp[row + x] = acc;
+        }
+    }
+
+    // Vertical pass
+    for (let y = 0; y < height; y++) {
+        const y0 = y > radius ? y - radius : 0;
+        const y1 = y + radius < height ? y + radius : height - 1;
+        const row = y * width;
+        for (let x = 0; x < width; x++) {
+            let acc = temp[y0 * width + x];
+            if (isMax) {
+                for (let k = y0 + 1; k <= y1; k++) {
+                    const v = temp[k * width + x];
+                    if (v > acc) acc = v;
+                }
+            } else {
+                for (let k = y0 + 1; k <= y1; k++) {
+                    const v = temp[k * width + x];
+                    if (v < acc) acc = v;
+                }
+            }
+            dst[row + x] = acc;
+        }
+    }
+
+    return dst;
+}
+
+function boxBlurPass(src: Float32Array, tmp: Float32Array, dst: Float32Array, width: number, height: number, radius: number) {
+    // Horizontal running-sum pass with edge clamping
+    for (let y = 0; y < height; y++) {
+        const row = y * width;
+        let sum = 0;
+        const winSize = 2 * radius + 1;
+        for (let k = -radius; k <= radius; k++) {
+            const cx = k < 0 ? 0 : k >= width ? width - 1 : k;
+            sum += src[row + cx];
+        }
+        tmp[row] = sum / winSize;
+        for (let x = 1; x < width; x++) {
+            const addX = x + radius < width ? x + radius : width - 1;
+            const remX = x - radius - 1 >= 0 ? x - radius - 1 : 0;
+            sum += src[row + addX] - src[row + remX];
+            tmp[row + x] = sum / winSize;
+        }
+    }
+
+    // Vertical running-sum pass with edge clamping
+    const winSize = 2 * radius + 1;
+    for (let x = 0; x < width; x++) {
+        let sum = 0;
+        for (let k = -radius; k <= radius; k++) {
+            const cy = k < 0 ? 0 : k >= height ? height - 1 : k;
+            sum += tmp[cy * width + x];
+        }
+        dst[x] = sum / winSize;
+        for (let y = 1; y < height; y++) {
+            const addY = y + radius < height ? y + radius : height - 1;
+            const remY = y - radius - 1 >= 0 ? y - radius - 1 : 0;
+            sum += tmp[addY * width + x] - tmp[remY * width + x];
+            dst[y * width + x] = sum / winSize;
+        }
+    }
+}
+
+function gaussianApproxBlur(src: Float32Array, width: number, height: number, radius: number): Float32Array {
+    // 3-pass separable box blur closely approximates a Gaussian blur with sigma ~= radius in O(N).
+    const a = new Float32Array(src.length);
+    const b = new Float32Array(src.length);
+    const tmp = new Float32Array(src.length);
+    boxBlurPass(src, tmp, a, width, height, radius);
+    boxBlurPass(a, tmp, b, width, height, radius);
+    boxBlurPass(b, tmp, a, width, height, radius);
+    return a;
+}
+
+/**
+ * Restores low-contrast local lightness detail (e.g. dim letters on a coloured background,
+ * overlapping light clouds, subtle dividers) that colour adaptation and palette snapping
+ * tend to merge into a single ink. Flat areas and strong high-contrast edges are untouched.
+ */
+export function restoreFaintDetail(
+    origData: Uint8ClampedArray,
+    snappedRgb: Float32Array,
+    width: number,
+    height: number,
+    radius = Math.max(4, Math.min(8, Math.round(Math.min(width, height) / 150))),
+    faintRange = 96,
+    minLoss = 10,
+    gain = 2.5
+): Float32Array {
+    const pixelCount = width * height;
+    const origLuma = new Float32Array(pixelCount);
+    for (let p = 0, i = 0; p < pixelCount; p++, i += 4) {
+        origLuma[p] = 0.299 * origData[i] + 0.587 * origData[i + 1] + 0.114 * origData[i + 2];
+    }
+
+    const localMax = separableMinMax1D(origLuma, width, height, radius, true);
+    const localMin = separableMinMax1D(origLuma, width, height, radius, false);
+
+    const faintMask = new Uint8Array(pixelCount);
+    let anyFaint = false;
+    for (let p = 0; p < pixelCount; p++) {
+        const range = localMax[p] - localMin[p];
+        if (range > 12 && range < faintRange) {
+            faintMask[p] = 1;
+            anyFaint = true;
+        }
+    }
+    if (!anyFaint) return snappedRgb;
+
+    const snappedLuma = new Float32Array(pixelCount);
+    for (let p = 0, j = 0; p < pixelCount; p++, j += 3) {
+        snappedLuma[p] = 0.299 * snappedRgb[j] + 0.587 * snappedRgb[j + 1] + 0.114 * snappedRgb[j + 2];
+    }
+
+    const origBlur = gaussianApproxBlur(origLuma, width, height, radius);
+    const snappedBlur = gaussianApproxBlur(snappedLuma, width, height, radius);
+
+    for (let p = 0, j = 0; p < pixelCount; p++, j += 3) {
+        if (!faintMask[p]) continue;
+        const origDetail = origLuma[p] - origBlur[p];
+        const snappedDetail = snappedLuma[p] - snappedBlur[p];
+        const missing = gain * origDetail - snappedDetail;
+        if (Math.abs(missing) >= minLoss) {
+            snappedRgb[j] = clampByte(snappedRgb[j] + missing);
+            snappedRgb[j + 1] = clampByte(snappedRgb[j + 1] + missing);
+            snappedRgb[j + 2] = clampByte(snappedRgb[j + 2] + missing);
+        }
+    }
+
+    return snappedRgb;
+}
+
 function renderGraphicsMode(imageData: ImageData, inkSaturation: number): ImageData {
     const width = imageData.width;
     const height = imageData.height;
@@ -624,6 +786,7 @@ function renderGraphicsMode(imageData: ImageData, inkSaturation: number): ImageD
         snappedRgb[j + 2] = snapped[2];
     }
 
+    restoreFaintDetail(origCopy, snappedRgb, width, height);
     const indices = orderedBayerDither(snappedRgb, width, height, quantPalette);
     sharpenEdges(indices, origCopy, snappedRgb, width, height);
 
@@ -659,8 +822,6 @@ export function detectContentMode(
     let flatCount = 0;
     let smoothGradCount = 0;
     let neighborPairs = 0;
-    let totalEdges = 0;
-    let subtleDarkEdges = 0;
 
     const maxX = bx + bw;
     const maxY = by + bh;
@@ -689,35 +850,16 @@ export function detectContentMode(
                 } else if (maxDelta > 3 && maxDelta < 24) {
                     smoothGradCount++;
                 }
-
-                if (maxDelta >= 18) {
-                    totalEdges++;
-                    const l0 = 0.299 * r + 0.587 * g + 0.114 * b;
-                    const lR = 0.299 * data[idxR] + 0.587 * data[idxR + 1] + 0.114 * data[idxR + 2];
-                    const lD = 0.299 * data[idxD] + 0.587 * data[idxD + 1] + 0.114 * data[idxD + 2];
-                    const maxL = Math.max(l0, lR, lD);
-                    const minL = Math.min(l0, lR, lD);
-                    const dL = maxL - minL;
-                    if (maxL < 125 && dL >= 12 && dL <= 75) {
-                        subtleDarkEdges++;
-                    }
-                }
             }
         }
     }
 
     let uniqueColors = 0;
-    let domBucket = 0;
-    let domCount = 0;
     const top10: number[] = [];
     for (let i = 0; i < hist.length; i++) {
         const count = hist[i];
         if (count > 0) {
             uniqueColors++;
-            if (count > domCount) {
-                domCount = count;
-                domBucket = i;
-            }
             if (top10.length < 10) {
                 top10.push(count);
                 if (top10.length === 10) top10.sort((a, b) => b - a);
@@ -732,13 +874,6 @@ export function detectContentMode(
     const flatRatio = neighborPairs > 0 ? flatCount / neighborPairs : 0;
     const smoothGradientRatio = neighborPairs > 0 ? smoothGradCount / neighborPairs : 0;
     const top10Share = sampleCount > 0 ? top10Sum / sampleCount : 0;
-    const subtleDarkEdgeShare = totalEdges > 0 ? subtleDarkEdges / totalEdges : 0;
-
-    const domR = ((domBucket >> 10) & 31) * 8 + 4;
-    const domG = ((domBucket >> 5) & 31) * 8 + 4;
-    const domB = (domBucket & 31) * 8 + 4;
-    const dominantBgLuma = 0.299 * domR + 0.587 * domG + 0.114 * domB;
-    const dominantBgShare = sampleCount > 0 ? domCount / sampleCount : 0;
 
     const isFlat = flatRatio > 0.55;
     const isLowDiversity = uniqueColors < 1200 || top10Share > 0.65;
@@ -746,18 +881,7 @@ export function detectContentMode(
 
     const score = (isFlat ? 1 : 0) + (isLowDiversity ? 1 : 0) + (isBimodalEdges ? 1 : 0);
     const requiredScore = options?.hasCameraExif ? 3 : 2;
-    const isGraphics = score >= requiredScore;
-    const hasSubtleDarkDetail =
-        isGraphics &&
-        dominantBgLuma < 90 &&
-        dominantBgShare > 0.50 &&
-        totalEdges >= 30 &&
-        subtleDarkEdgeShare > 0.40;
-    const mode: 'vivid' | 'photo' | 'graphics' = hasSubtleDarkDetail
-        ? 'photo'
-        : isGraphics
-          ? 'graphics'
-          : 'vivid';
+    const mode = score >= requiredScore ? 'graphics' : 'vivid';
 
     return {
         mode,
@@ -766,7 +890,6 @@ export function detectContentMode(
             uniqueColors,
             top10Share,
             smoothGradientRatio,
-            subtleDarkEdgeShare,
         },
     };
 }
